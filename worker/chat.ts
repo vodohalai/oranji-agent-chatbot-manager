@@ -1,38 +1,20 @@
 import OpenAI from 'openai';
 import type { Message, ToolCall } from './types';
 import { getToolDefinitions, executeTool } from './tools';
-import { ChatCompletionMessageFunctionToolCall } from 'openai/resources/index.mjs';
+import { ChatCompletionMessageFunctionToolCall, ChatCompletionMessageToolCall } from 'openai/resources/index.mjs';
 import type { Env } from './core-utils';
-const VIETNAMESE_SYSTEM_PROMPT = "Bạn là một trợ lý AI thông thạo tiếng Việt, được tích hợp vào ứng dụng Oranji. Nhiệm vụ của bạn là hỗ trợ người dùng một cách tự nhiên và hữu ích. Bạn có khả năng truy xuất thông tin sản phẩm từ cơ sở dữ liệu D1 và tìm kiếm nội dung tài liệu từ bộ nhớ R2. Hãy luôn trả lời bằng tiếng Việt, trừ khi được yêu cầu sử dụng ngôn ngữ khác. Giữ ngữ cảnh từ 20 tin nhắn gần nhất để cuộc trò chuyện được liền mạch.";
+import { getSystemPrompt } from './core-utils';
 export class ChatHandler {
   private client: OpenAI;
   private model: string;
   private env: Env;
-  private sessionId: string;
-  constructor(aiGatewayUrl: string, apiKey: string, model: string, env: Env, sessionId: string) {
+  constructor(aiGatewayUrl: string, apiKey: string, model: string, env: Env) {
     this.client = new OpenAI({
       baseURL: aiGatewayUrl,
       apiKey: apiKey
     });
     this.model = model;
     this.env = env;
-    this.sessionId = sessionId;
-  }
-  private async saveToChatlog(messages: Message[]): Promise<void> {
-    const validMessages = messages.filter(m => m.role === 'user' || m.role === 'assistant');
-    for (const msg of validMessages) {
-      try {
-        await executeTool('save_chat_message', {
-          session_id: this.sessionId,
-          role: msg.role,
-          content: msg.content,
-          timestamp: msg.timestamp,
-          tool_calls: msg.toolCalls || null
-        }, this.env);
-      } catch (e) {
-        console.error(`Failed to save message ${msg.id} to chatlog:`, e);
-      }
-    }
   }
   async processMessage(
     message: string,
@@ -50,7 +32,7 @@ export class ChatHandler {
         content: message,
         timestamp: Date.now()
     };
-    const messages = this.buildConversationMessages(message, conversationHistory);
+    const messages = await this.buildConversationMessages(userMessage, conversationHistory);
     const toolDefinitions = await getToolDefinitions();
     if (onChunk) {
       const stream = await this.client.chat.completions.create({
@@ -61,7 +43,6 @@ export class ChatHandler {
         stream: true,
       });
       const result = await this.handleStreamResponse(stream, messages, onChunk);
-      await this.saveToChatlog([userMessage, result.assistantMessage]);
       return { ...result, userMessage };
     }
     const completion = await this.client.chat.completions.create({
@@ -71,12 +52,11 @@ export class ChatHandler {
       tool_choice: 'auto',
     });
     const result = await this.handleNonStreamResponse(completion, messages);
-    await this.saveToChatlog([userMessage, result.assistantMessage]);
     return { ...result, userMessage };
   }
   private async handleStreamResponse(
     stream: AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>,
-    conversation: any[],
+    conversation: OpenAI.Chat.Completions.ChatCompletionMessageParam[],
     onChunk: (chunk: string) => void
   ) {
     let fullContent = '';
@@ -112,7 +92,7 @@ export class ChatHandler {
   }
   private async handleNonStreamResponse(
     completion: OpenAI.Chat.Completions.ChatCompletion,
-    conversation: any[]
+    conversation: OpenAI.Chat.Completions.ChatCompletionMessageParam[]
   ) {
     const responseMessage = completion.choices[0]?.message;
     if (!responseMessage) {
@@ -144,8 +124,8 @@ export class ChatHandler {
     );
   }
   private async generateToolResponse(
-    history: any[],
-    openAiToolCalls: OpenAI.Chat.Completions.ChatCompletionMessageToolCall[],
+    history: OpenAI.Chat.Completions.ChatCompletionMessageParam[],
+    openAiToolCalls: ChatCompletionMessageToolCall[],
     toolResults: ToolCall[]
   ): Promise<string> {
     const followUpCompletion = await this.client.chat.completions.create({
@@ -162,15 +142,16 @@ export class ChatHandler {
     });
     return followUpCompletion.choices[0]?.message?.content || 'Tool results processed successfully.';
   }
-  private buildConversationMessages(userMessage: string, history: Message[]) {
+  private async buildConversationMessages(userMessage: Message, history: Message[]): Promise<OpenAI.Chat.Completions.ChatCompletionMessageParam[]> {
+    const systemPrompt = await getSystemPrompt(this.env);
     const validHistory = history
       .slice(-20)
-      .filter(m => ['user', 'assistant'].includes(m.role))
+      .filter(m => (m.role === 'user' || m.role === 'assistant'))
       .map(m => ({ role: m.role as 'user' | 'assistant', content: m.content }));
     return [
-      { role: 'system' as const, content: VIETNAMESE_SYSTEM_PROMPT },
+      { role: 'system', content: systemPrompt },
       ...validHistory,
-      { role: 'user' as const, content: userMessage }
+      { role: 'user', content: userMessage.content }
     ];
   }
   updateModel(newModel: string): void {

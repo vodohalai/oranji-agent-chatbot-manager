@@ -1,6 +1,7 @@
-import type { WeatherResult, ErrorResult } from './types';
+import type { WeatherResult, ErrorResult, Message } from './types';
 import { mcpManager } from './mcp-client';
 import type { Env } from './core-utils';
+import { mockMessages, mockSessions } from './core-utils';
 export type ToolResult = WeatherResult | { content: string } | ErrorResult | { success: boolean } | { data: any[] };
 interface SerpApiResponse {
   knowledge_graph?: { title?: string; description?: string; source?: { link?: string } };
@@ -42,7 +43,7 @@ const customTools = [
     type: 'function' as const,
     function: {
       name: 'get_products',
-      description: 'Truy xuất thông tin s���n phẩm từ cơ sở dữ liệu. Có thể lọc theo truy vấn hoặc danh mục.',
+      description: 'Truy xuất thông tin sản phẩm từ cơ sở dữ liệu. Có thể l��c theo truy vấn hoặc danh mục.',
       parameters: {
         type: 'object',
         properties: {
@@ -58,7 +59,7 @@ const customTools = [
     type: 'function' as const,
     function: {
       name: 'fetch_document',
-      description: 'Truy xuất nội dung của một tài liệu đã t��i lên từ bộ nhớ R2.',
+      description: 'Truy xuất nội dung của một tài liệu đã tải lên từ bộ nhớ R2.',
       parameters: {
         type: 'object',
         properties: {
@@ -68,25 +69,6 @@ const customTools = [
       }
     }
   },
-  {
-    type: 'function' as const,
-    function: {
-      name: 'save_chat_message',
-      description: 'Lưu một tin nhắn vào lịch sử trò chuyện. Công cụ nội bộ, không dành cho người dùng.',
-      parameters: {
-        type: 'object',
-        properties: {
-          session_id: { type: 'string' },
-          sender_id: { type: 'string' },
-          role: { type: 'string', enum: ['user', 'assistant'] },
-          content: { type: 'string' },
-          timestamp: { type: 'number' },
-          tool_calls: { type: 'string' } // JSON string
-        },
-        required: ['session_id', 'role', 'content', 'timestamp']
-      }
-    }
-  }
 ];
 export async function getToolDefinitions() {
   const mcpTools = await mcpManager.getToolDefinitions();
@@ -123,7 +105,7 @@ const formatSearchResults = (data: SerpApiResponse, query: string, numResults: n
       }
     });
   }
-  return results.length ? `��� Search results for "${query}":\n\n${results.join('\n\n')}`
+  return results.length ? `🔍 Search results for "${query}":\n\n${results.join('\n\n')}`
     : `No results found for "${query}". Try: https://www.google.com/search?q=${encodeURIComponent(query)}`;
 };
 async function performWebSearch(query: string, numResults = 5, env: Env): Promise<string> {
@@ -163,9 +145,9 @@ async function fetchWebContent(url: string): Promise<string> {
   }
 }
 const MOCK_PRODUCTS = [
-    { id: '1', name: 'Sản phẩm Oranji', description: 'Trợ lý AI tiếng Việt thông minh', price: 500000, stock_quantity: 100, category: 'AI' },
+    { id: '1', name: 'Sản phẩm Oranji', description: 'Trợ l�� AI tiếng Việt thông minh', price: 500000, stock_quantity: 100, category: 'AI' },
     { id: '2', name: 'Gói Cloudflare Worker', description: 'Triển khai ứng dụng serverless tại biên', price: 120000, stock_quantity: 1000, category: 'Infrastructure' },
-    { id: '3', name: 'Lưu trữ R2', description: 'Lưu trữ đối tượng tương thích S3 với chi phí thấp', price: 5000, stock_quantity: null, category: 'Storage' },
+    { id: '3', name: 'L��u trữ R2', description: 'Lưu trữ đối tượng tương thích S3 với chi phí thấp', price: 5000, stock_quantity: null, category: 'Storage' },
     { id: '4', name: 'Cơ sở dữ liệu D1', description: 'Cơ sở dữ liệu SQL serverless', price: 25000, stock_quantity: null, category: 'Database' },
     { id: '5', name: 'Tư vấn triển khai AI', description: 'Dịch vụ tư vấn chuyên nghiệp cho dự án AI', price: 10000000, stock_quantity: 10, category: 'Service' },
 ];
@@ -181,37 +163,23 @@ export async function executeTool(name: string, args: Record<string, unknown>, e
         };
       case 'web_search': {
         const { query, url, num_results = 5 } = args;
-        if (typeof url === 'string') return { content: await fetchWebContent(url) };
-        if (typeof query === 'string') return { content: await performWebSearch(query, num_results as number, env) };
+        if (typeof url === 'string' && url) return { content: await fetchWebContent(url) };
+        if (typeof query === 'string' && query) return { content: await performWebSearch(query, num_results as number, env) };
         return { error: 'Either query or url parameter is required' };
       }
-      case 'save_chat_message': {
-        if (!env.DB) {
-          console.log('DB binding not found. Skipping chat log persistence.', args);
-          return { success: true };
-        }
-        const { session_id, sender_id, role, content, timestamp, tool_calls } = args;
-        await env.DB.prepare(
-          `INSERT INTO chatlog (id, session_id, sender_id, role, content, timestamp, tool_calls) VALUES (?, ?, ?, ?, ?, ?, ?)`
-        ).bind(crypto.randomUUID(), session_id, sender_id || null, role, content, timestamp, tool_calls ? JSON.stringify(tool_calls) : null).run();
-        // Prune old messages, keeping the last 20
-        const pruneStmt = `
-          DELETE FROM chatlog WHERE id IN (
-            SELECT id FROM (
-              SELECT id, ROW_NUMBER() OVER (PARTITION BY session_id ORDER BY timestamp DESC) as rn
-              FROM chatlog WHERE session_id = ?
-            ) WHERE rn > 20
-          )
-        `;
-        await env.DB.prepare(pruneStmt).bind(session_id).run();
-        return { success: true };
-      }
       case 'get_products': {
+        const { query, category, limit = 10 } = args;
         if (!env.DB) {
           console.log('DB binding not found. Returning mock products.');
-          return { data: MOCK_PRODUCTS };
+          let results = MOCK_PRODUCTS;
+          if (query && typeof query === 'string') {
+            results = results.filter(p => p.name.toLowerCase().includes(query.toLowerCase()));
+          }
+          if (category && typeof category === 'string') {
+            results = results.filter(p => p.category.toLowerCase() === category.toLowerCase());
+          }
+          return { data: results.slice(0, limit as number) };
         }
-        const { query, category, limit = 10 } = args;
         let stmt = 'SELECT * FROM products_info';
         const conditions: string[] = [];
         const bindings: (string | number)[] = [];
@@ -226,7 +194,7 @@ export async function executeTool(name: string, args: Record<string, unknown>, e
         if (conditions.length > 0) {
           stmt += ' WHERE ' + conditions.join(' AND ');
         }
-        stmt += ' ORDER BY id LIMIT ?';
+        stmt += ' ORDER BY name LIMIT ?';
         bindings.push(limit as number);
         const { results } = await env.DB.prepare(stmt).bind(...bindings).all();
         return { data: results };
@@ -234,13 +202,15 @@ export async function executeTool(name: string, args: Record<string, unknown>, e
       case 'fetch_document': {
         const { key } = args;
         if (!key || typeof key !== 'string') return { error: 'Document key is required.' };
-        if (env.R2_DOCS) {
-          const object = await env.R2_DOCS.get(key);
-          if (object === null) return { content: `Tài liệu '${key}' không tồn tại.` };
-          return { content: await object.text() };
+        if (!env.R2_DOCS) {
+            if (key.startsWith('http')) {
+                return { content: await fetchWebContent(key as string) };
+            }
+            return { error: 'R2 not configured. Cannot fetch document unless a public URL is provided.' };
         }
-        // Fallback logic can be added here, e.g., public URL
-        return { error: 'R2 binding not configured. Cannot fetch document.' };
+        const object = await env.R2_DOCS.get(key);
+        if (object === null) return { content: `Tài liệu '${key}' không tồn tại.` };
+        return { content: await object.text() };
       }
       default: {
         const content = await mcpManager.executeTool(name, args);

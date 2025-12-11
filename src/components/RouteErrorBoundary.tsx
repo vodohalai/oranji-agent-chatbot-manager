@@ -1,60 +1,40 @@
-import { useRouteError, isRouteErrorResponse } from 'react-router-dom';
-import { useEffect } from 'react';
-import { errorReporter } from '@/lib/errorReporter';
-import { ErrorFallback } from './ErrorFallback';
-
+import React from 'react';
+import { useRouteError, isRouteErrorResponse, useNavigate } from 'react-router-dom';
+import { Button } from '@/components/ui/button';
+import { AlertTriangle } from 'lucide-react';
 export function RouteErrorBoundary() {
   const error = useRouteError();
-
-  useEffect(() => {
-    if (error) {
-      let errorMessage = 'Unknown route error';
-      let errorStack = '';
-
-      if (isRouteErrorResponse(error)) {
-        errorMessage = `Route Error ${error.status}: ${error.statusText}`;
-        if (error.data) {
-          errorMessage += ` - ${JSON.stringify(error.data)}`;
-        }
-      } else if (error instanceof Error) {
-        errorMessage = error.message;
-        errorStack = error.stack || '';
-      } else if (typeof error === 'string') {
-        errorMessage = error;
-      } else {
-        errorMessage = JSON.stringify(error);
-      }
-
-      errorReporter.report({
-        message: errorMessage,
-        stack: errorStack,
-        url: window.location.href,
-        timestamp: new Date().toISOString(),
-        source: 'react-router',
-        error: error,
-        level: "error",
-      });
-    }
-  }, [error]);
-
-  // Render error UI using shared ErrorFallback component
+  const navigate = useNavigate();
+  let errorMessage: string;
+  let errorStatus: number | undefined;
   if (isRouteErrorResponse(error)) {
-    return (
-      <ErrorFallback
-        title={`${error.status} ${error.statusText}`}
-        message="Sorry, an error occurred while loading this page."
-        error={error.data ? { message: JSON.stringify(error.data, null, 2) } : error}
-        statusMessage="Navigation error detected"
-      />
-    );
+    errorMessage = error.statusText || 'An unexpected error occurred.';
+    errorStatus = error.status;
+  } else if (error instanceof Error) {
+    errorMessage = error.message;
+  } else if (typeof error === 'string') {
+    errorMessage = error;
+  } else {
+    console.error('Unknown routing error', error);
+    errorMessage = 'An unknown error occurred.';
   }
-
   return (
-    <ErrorFallback
-      title="Unexpected Error"
-      message="An unexpected error occurred while loading this page."
-      error={error}
-      statusMessage="Routing error detected"
-    />
+    <div className="flex items-center justify-center min-h-screen bg-background text-foreground p-4" role="alert">
+      <div className="text-center max-w-md">
+        <AlertTriangle className="mx-auto h-16 w-16 text-destructive mb-4" />
+        <h1 className="text-3xl font-bold text-destructive">
+          {errorStatus ? `Error ${errorStatus}` : 'Oops! Something went wrong.'}
+        </h1>
+        <p className="mt-2 text-lg text-muted-foreground">
+          {errorMessage}
+        </p>
+        <p className="mt-4 text-sm text-muted-foreground">
+          We've logged the issue and are looking into it. Please try again later.
+        </p>
+        <Button onClick={() => navigate('/')} className="mt-6">
+          Go back to Homepage
+        </Button>
+      </div>
+    </div>
   );
 }

@@ -1,53 +1,139 @@
 import { Hono } from "hono";
-import { getAgentByName } from 'agents';
-import { ChatAgent } from './agent';
 import { API_RESPONSES } from './config';
-import { Env, getAppController, registerSession, unregisterSession, getSystemPrompt } from "./core-utils";
-export function coreRoutes(app: Hono<{ Bindings: Env }>) {
-    app.all('/api/chat/:sessionId/*', async (c) => {
-        try {
-            const sessionId = c.req.param('sessionId');
-            const agent = await getAgentByName<Env, ChatAgent>(c.env.CHAT_AGENT, sessionId);
-            const url = new URL(c.req.url);
-            url.pathname = url.pathname.replace(`/api/chat/${sessionId}`, '');
-            return agent.fetch(new Request(url.toString(), {
-                method: c.req.method,
-                headers: c.req.header(),
-                body: c.req.method === 'GET' || c.req.method === 'DELETE' ? undefined : c.req.raw.body
-            }));
-        } catch (error) {
-            console.error('Agent routing error:', error);
-            return c.json({ success: false, error: API_RESPONSES.AGENT_ROUTING_FAILED }, { status: 500 });
+import { Env, getSystemPrompt, setSystemPrompt, mockMessages, mockSessions } from "./core-utils";
+import { ChatHandler } from './chat';
+import type { Message, SessionInfo } from './types';
+import { createEncoder, createStreamResponse } from './utils';
+async function saveMessagesToChatlog(messages: Message[], sessionId: string, env: Env) {
+    if (!env.DB) {
+        const sessionMsgs = (mockMessages.get(sessionId) || []).concat(messages);
+        if (sessionMsgs.length > 20) {
+            mockMessages.set(sessionId, sessionMsgs.slice(sessionMsgs.length - 20));
+        } else {
+            mockMessages.set(sessionId, sessionMsgs);
         }
+        return;
+    }
+    const stmts = messages.map(msg => env.DB.prepare(
+        `INSERT INTO chatlog (id, session_id, role, content, timestamp, tool_calls, tool_call_id) VALUES (?, ?, ?, ?, ?, ?, ?)`
+    ).bind(
+        msg.id,
+        sessionId,
+        msg.role,
+        msg.content,
+        msg.timestamp,
+        msg.toolCalls ? JSON.stringify(msg.toolCalls) : null,
+        msg.tool_call_id || null
+    ));
+    await env.DB.batch(stmts);
+    // Prune old messages, keeping the last 20
+    await env.DB.prepare(`
+        DELETE FROM chatlog WHERE id IN (
+            SELECT id FROM (
+                SELECT id, ROW_NUMBER() OVER (PARTITION BY session_id ORDER BY timestamp DESC) as rn
+                FROM chatlog WHERE session_id = ?
+            ) WHERE rn > 20
+        )
+    `).bind(sessionId).run();
+}
+async function getLast20Messages(sessionId: string, env: Env): Promise<Message[]> {
+    if (!env.DB) {
+        return mockMessages.get(sessionId) || [];
+    }
+    const { results } = await env.DB.prepare(
+        'SELECT * FROM chatlog WHERE session_id = ? ORDER BY timestamp DESC LIMIT 20'
+    ).bind(sessionId).all<Message>();
+    return results.reverse();
+}
+export function coreRoutes(app: Hono<{ Bindings: Env }>) {
+    app.get('/api/chat/:sessionId/messages', async (c) => {
+        const sessionId = c.req.param('sessionId');
+        const messages = await getLast20Messages(sessionId, c.env);
+        const model = 'google-ai-studio/gemini-2.5-flash'; // You might want to store this per session
+        return c.json({ success: true, data: { messages, sessionId, model } });
+    });
+    app.post('/api/chat/:sessionId/chat', async (c) => {
+        const sessionId = c.req.param('sessionId');
+        const body = await c.req.json();
+        const { message, model, stream } = body;
+        if (!message?.trim()) {
+            return c.json({ success: false, error: API_RESPONSES.MISSING_MESSAGE }, { status: 400 });
+        }
+        const history = await getLast20Messages(sessionId, c.env);
+        const handler = new ChatHandler(c.env.CF_AI_BASE_URL, c.env.CF_AI_API_KEY, model, c.env);
+        if (stream) {
+            const { readable, writable } = new TransformStream();
+            const writer = writable.getWriter();
+            const encoder = createEncoder();
+            (async () => {
+                try {
+                    const { userMessage, assistantMessage } = await handler.processMessage(message, history, (chunk) => {
+                        writer.write(encoder.encode(chunk));
+                    });
+                    await saveMessagesToChatlog([userMessage, assistantMessage], sessionId, c.env);
+                } catch (error) {
+                    console.error('Streaming error:', error);
+                    const errorMessage = 'Sorry, I encountered an error.';
+                    writer.write(encoder.encode(errorMessage));
+                } finally {
+                    writer.close();
+                }
+            })();
+            return createStreamResponse(readable);
+        }
+        const { userMessage, assistantMessage } = await handler.processMessage(message, history);
+        await saveMessagesToChatlog([userMessage, assistantMessage], sessionId, c.env);
+        return c.json({ success: true, data: { messages: [...history, userMessage, assistantMessage], sessionId, model } });
     });
 }
 export function userRoutes(app: Hono<{ Bindings: Env }>) {
     // Session Management
     app.get('/api/sessions', async (c) => {
-        const controller = getAppController(c.env);
-        const sessions = await controller.listSessions();
-        return c.json({ success: true, data: sessions });
+        if (!c.env.DB) {
+            const sessions = Array.from(mockSessions.values()).sort((a, b) => b.lastActive - a.lastActive);
+            return c.json({ success: true, data: sessions });
+        }
+        const { results } = await c.env.DB.prepare('SELECT * FROM sessions ORDER BY lastActive DESC').all<SessionInfo>();
+        return c.json({ success: true, data: results });
     });
     app.post('/api/sessions', async (c) => {
-        const body = await c.req.json().catch(() => ({}));
-        const { title, sessionId: providedSessionId, firstMessage } = body;
+        const { title, sessionId: providedSessionId, firstMessage } = await c.req.json();
         const sessionId = providedSessionId || crypto.randomUUID();
-        let sessionTitle = title || `Trò chuyện lúc ${new Date().toLocaleTimeString()}`;
-        if (!title && firstMessage) {
-            sessionTitle = firstMessage.trim().substring(0, 40) + '...';
+        const now = Date.now();
+        const sessionTitle = title || (firstMessage ? (firstMessage.trim().substring(0, 40) + '...') : `Trò chuyện lúc ${new Date(now).toLocaleTimeString()}`);
+        const session: SessionInfo = { id: sessionId, title: sessionTitle, createdAt: now, lastActive: now };
+        if (!c.env.DB) {
+            mockSessions.set(sessionId, session);
+        } else {
+            await c.env.DB.prepare('INSERT INTO sessions (id, title, createdAt, lastActive) VALUES (?, ?, ?, ?)')
+                .bind(session.id, session.title, session.createdAt, session.lastActive).run();
         }
-        await registerSession(c.env, sessionId, sessionTitle);
         return c.json({ success: true, data: { sessionId, title: sessionTitle } });
     });
     app.delete('/api/sessions/all', async (c) => {
-        const controller = getAppController(c.env);
-        await controller.clearAllSessions();
+        if (!c.env.DB) {
+            mockSessions.clear();
+            mockMessages.clear();
+        } else {
+            await c.env.DB.batch([
+                c.env.DB.prepare('DELETE FROM sessions'),
+                c.env.DB.prepare('DELETE FROM chatlog'),
+            ]);
+        }
         return c.json({ success: true });
     });
     app.delete('/api/sessions/:sessionId', async (c) => {
         const sessionId = c.req.param('sessionId');
-        const deleted = await unregisterSession(c.env, sessionId);
-        return c.json({ success: deleted, data: { deleted } });
+        if (!c.env.DB) {
+            mockSessions.delete(sessionId);
+            mockMessages.delete(sessionId);
+        } else {
+            await c.env.DB.batch([
+                c.env.DB.prepare('DELETE FROM sessions WHERE id = ?').bind(sessionId),
+                c.env.DB.prepare('DELETE FROM chatlog WHERE session_id = ?').bind(sessionId),
+            ]);
+        }
+        return c.json({ success: true, data: { deleted: true } });
     });
     // Admin: Products (D1)
     app.get('/api/admin/products', async (c) => {
@@ -114,12 +200,7 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     app.post('/api/admin/system-prompt', async (c) => {
         const { prompt } = await c.req.json();
         if (typeof prompt !== 'string') return c.json({ success: false, error: 'Prompt is required' }, 400);
-        const controller = getAppController(c.env);
-        await controller.fetch(new Request('http://do/postSystemPrompt', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ prompt })
-        }));
+        await setSystemPrompt(prompt, c.env);
         return c.json({ success: true });
     });
     // Messenger Webhook
@@ -143,10 +224,9 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
                 if (event.message && event.sender) {
                     const senderId = event.sender.id;
                     const messageText = event.message.text;
-                    const sessionId = `fb-${senderId}`; // Map senderId to a unique sessionId
+                    const sessionId = `fb-${senderId}`;
                     const chatBody = {
                         message: messageText,
-                        sender_id: senderId,
                         model: 'google-ai-studio/gemini-2.5-flash',
                         stream: true
                     };

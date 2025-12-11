@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { Bot, Plus, Trash2, Settings, Menu, X, MessageSquare } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -18,34 +18,31 @@ export function HomePage() {
   const [chatState, setChatState] = useState<ChatState>({
     messages: [],
     sessionId: chatService.getSessionId(),
-    isProcessing: false,
     model: MODELS[0].id,
-    streamingMessage: ''
   });
+  const [streamingMessage, setStreamingMessage] = useState('');
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [sessions, setSessions] = useState<SessionInfo[]>([]);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const handleNewSession = useCallback(() => {
     chatService.newSession();
-    setChatState(prev => ({
-      ...prev,
+    setChatState({
       messages: [],
       sessionId: 'new',
-      isProcessing: false,
-      streamingMessage: ''
-    }));
+      model: chatState.model,
+    });
+    setStreamingMessage('');
     setIsSidebarOpen(false);
-  }, []);
+  }, [chatState.model]);
   const loadCurrentSession = useCallback(async (sessionId: string) => {
     if (!sessionId || sessionId === 'new') {
       setChatState(prev => ({
         ...prev,
         messages: [],
         sessionId: 'new',
-        isProcessing: false,
-        streamingMessage: ''
       }));
+      setStreamingMessage('');
       return;
     }
     chatService.switchSession(sessionId);
@@ -53,9 +50,10 @@ export function HomePage() {
     if (response.success && response.data) {
       setChatState(response.data);
     } else {
-      toast.error("Không thể t���i phiên. Bắt đầu phiên mới.");
+      toast.error("Không thể tải phiên. Bắt đầu phiên mới.");
       handleNewSession();
     }
+    setStreamingMessage('');
   }, [handleNewSession]);
   const loadSessions = useCallback(async (selectSessionId?: string) => {
     const response = await chatService.listSessions();
@@ -95,10 +93,11 @@ export function HomePage() {
         return;
       }
     }
-    const userMessage = { id: crypto.randomUUID(), role: 'user' as const, content: message, timestamp: Date.now() };
-    setChatState(prev => ({ ...prev, messages: [...prev.messages, userMessage], streamingMessage: '', sessionId: currentSessionId }));
+    const userMessage = { id: crypto.randomUUID(), role: 'user' as const, content: message, timestamp: Date.now(), toolCalls: [] };
+    setChatState(prev => ({ ...prev, messages: [...prev.messages, userMessage], sessionId: currentSessionId }));
+    setStreamingMessage('');
     await chatService.sendMessage(message, chatState.model, (chunk) => {
-      setChatState(prev => ({ ...prev, streamingMessage: (prev.streamingMessage || '') + chunk }));
+      setStreamingMessage(prev => prev + chunk);
     });
     await loadCurrentSession(currentSessionId);
     setIsLoading(false);
@@ -111,9 +110,7 @@ export function HomePage() {
   };
   const handleModelChange = async (model: string) => {
     setChatState(prev => ({ ...prev, model }));
-    if (chatService.getSessionId() !== 'new') {
-      await chatService.updateModel(model);
-    }
+    // Model is now sent with each message, no need to update server-side session state
   };
   const handleSwitchSession = async (sessionId: string) => {
     await loadCurrentSession(sessionId);
@@ -176,8 +173,8 @@ export function HomePage() {
         ))}
       </div>
       <div className="mt-auto pt-4 border-t">
-        <Button variant="ghost" className="w-full justify-start">
-          <Settings className="mr-2 h-4 w-4" /> C��i đặt
+        <Button variant="ghost" className="w-full justify-start" asChild>
+          <a href="/settings"><Settings className="mr-2 h-4 w-4" /> Cài đặt</a>
         </Button>
       </div>
     </aside>
@@ -221,7 +218,7 @@ export function HomePage() {
               </header>
               <div className="flex-1 overflow-hidden pt-4">
                 <ChatWindow
-                  chatState={chatState}
+                  chatState={{...chatState, streamingMessage: streamingMessage, isProcessing: isLoading}}
                   input={input}
                   isLoading={isLoading}
                   onInputChange={(e) => setInput(e.target.value)}

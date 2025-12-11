@@ -10,10 +10,10 @@ export const MODELS = [
   { id: 'google-ai-studio/gemini-2.0-flash', name: 'Gemini 2.0 Flash' },
 ];
 export const MOCK_PRODUCTS = [
-    { id: '1', name: 'S��n phẩm Oranji', description: 'Trợ lý AI tiếng Việt thông minh', price: 500000, stock_quantity: 100, category: 'AI' },
+    { id: '1', name: 'Sản phẩm Oranji', description: 'Trợ lý AI tiếng Việt thông minh', price: 500000, stock_quantity: 100, category: 'AI' },
     { id: '2', name: 'Gói Cloudflare Worker', description: 'Triển khai ứng dụng serverless tại biên', price: 120000, stock_quantity: 1000, category: 'Infrastructure' },
     { id: '3', name: 'Lưu trữ R2', description: 'Lưu trữ đối tượng tương thích S3 với chi phí thấp', price: 5000, stock_quantity: 0, category: 'Storage' },
-    { id: '4', name: 'Cơ sở d�� liệu D1', description: 'Cơ sở dữ liệu SQL serverless', price: 25000, stock_quantity: 0, category: 'Database' },
+    { id: '4', name: 'Cơ sở dữ liệu D1', description: 'Cơ sở dữ liệu SQL serverless', price: 25000, stock_quantity: 0, category: 'Database' },
     { id: '5', name: 'Tư vấn triển khai AI', description: 'Dịch vụ tư vấn chuyên nghiệp cho dự án AI', price: 10000000, stock_quantity: 10, category: 'Service' },
 ];
 export const generateSessionTitle = (content?: string): string => {
@@ -50,7 +50,10 @@ class ChatService {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message, model, stream: !!onChunk }),
       });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
+        throw new Error(errorData.error);
+      }
       if (onChunk && response.body) {
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
@@ -63,7 +66,8 @@ class ChatService {
       }
       return await response.json();
     } catch (error) {
-      return { success: false, error: 'Failed to send message' };
+      console.error("sendMessage failed:", error);
+      return { success: false, error: error instanceof Error ? error.message : 'Failed to send message' };
     }
   }
   async getMessages(): Promise<ChatResponse> {
@@ -85,18 +89,8 @@ class ChatService {
   }
   async listSessions() { return this.request<SessionInfo[]>('/api/sessions'); }
   async deleteSession(sessionId: string) { return this.request(`/api/sessions/${sessionId}`, { method: 'DELETE' }); }
-  async clearMessages(): Promise<ChatResponse> {
-    return this.request<ChatState>(`${this.baseUrl}/clear`, { method: 'POST' });
-  }
   async clearAllSessions(): Promise<{ success: boolean }> {
     return this.request('/api/sessions/all', { method: 'DELETE' });
-  }
-  async updateModel(model: string) {
-    return this.request<ChatState>(`${this.baseUrl}/model`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model })
-    });
   }
   async exportSessions(format: 'json' | 'csv'): Promise<{ success: boolean; blob?: Blob; error?: string }> {
     const res = await this.listSessions();
@@ -139,7 +133,7 @@ class ChatService {
 export const chatService = new ChatService();
 export const formatTime = (timestamp: number): string => new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 export const renderToolCall = (toolCall: ToolCall): string => {
-  if (!toolCall.result) return `⚠️ ${toolCall.name}: No result`;
+  if (!toolCall.result) return `��️ ${toolCall.name}: No result`;
   if (typeof toolCall.result === 'object' && toolCall.result && 'error' in toolCall.result) return `❌ ${toolCall.name}: ${(toolCall.result as ErrorResult).error}`;
   return `✅ ${toolCall.name}: Executed`;
 };
