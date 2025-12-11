@@ -14,6 +14,7 @@ import '@/index.css'
 import { HomePage } from '@/pages/HomePage'
 import { AdminPage } from '@/pages/AdminPage';
 import { ChatEmbed } from '@/pages/ChatEmbed';
+import { SettingsPage } from '@/pages/SettingsPage';
 const queryClient = new QueryClient();
 const router = createBrowserRouter([
   {
@@ -29,6 +30,11 @@ const router = createBrowserRouter([
   {
     path: "/embed",
     element: <ChatEmbed />,
+    errorElement: <RouteErrorBoundary />,
+  },
+  {
+    path: "/settings",
+    element: <SettingsPage />,
     errorElement: <RouteErrorBoundary />,
   },
 ]);

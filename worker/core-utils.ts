@@ -9,6 +9,8 @@ export interface Env {
     APP_CONTROLLER: DurableObjectNamespace<AppController>;
     DB?: D1Database;
     R2_DOCS?: R2Bucket;
+    FB_VERIFY_TOKEN?: string;
+    FB_PAGE_TOKEN?: string;
 }
 export function getAppController(env: Env): DurableObjectStub<AppController> {
   const id = env.APP_CONTROLLER.idFromName("controller");

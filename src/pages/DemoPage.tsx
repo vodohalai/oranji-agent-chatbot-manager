@@ -125,13 +125,13 @@ export function DemoPage() { // Don't touch this exporting, Its a named export
     }
   };
   // Save current session if it has unsaved messages
-  const saveCurrentSessionIfNeeded = async () => {
+  const saveCurrentSessionIfNeeded = useCallback(async () => {
     if (hasUnsavedSession) {
       const firstUserMessage = chatState.messages.find(m => m.role === 'user');
       const title = generateSessionTitle(firstUserMessage?.content);
       await chatService.createSession(title, chatState.sessionId, firstUserMessage?.content);
     }
-  };
+  }, [hasUnsavedSession, chatState.messages, chatState.sessionId]);
   const handleNewSession = useCallback(async () => {
     // Save current session if needed
     await saveCurrentSessionIfNeeded();
@@ -145,7 +145,7 @@ export function DemoPage() { // Don't touch this exporting, Its a named export
       streamingMessage: ''
     });
     await loadSessions();
-  }, [chatState.model, hasUnsavedSession, chatState.messages, loadSessions]);
+  }, [chatState.model, loadSessions, saveCurrentSessionIfNeeded]);
   const handleSwitchSession = async (sessionId: string) => {
     // Save current session if needed before switching
     await saveCurrentSessionIfNeeded();

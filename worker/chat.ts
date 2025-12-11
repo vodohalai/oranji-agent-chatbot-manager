@@ -3,7 +3,7 @@ import type { Message, ToolCall } from './types';
 import { getToolDefinitions, executeTool } from './tools';
 import { ChatCompletionMessageFunctionToolCall } from 'openai/resources/index.mjs';
 import type { Env } from './core-utils';
-const VIETNAMESE_SYSTEM_PROMPT = "Bạn là một trợ lý AI thông th���o tiếng Việt, được tích hợp vào ứng dụng Oranji. Nhiệm vụ của bạn là hỗ trợ người dùng một cách tự nhiên và hữu ích. Bạn có khả năng truy xuất thông tin sản phẩm từ cơ sở dữ liệu D1 và tìm kiếm nội dung tài liệu từ bộ nhớ R2. Hãy luôn trả lời bằng tiếng Việt, trừ khi được yêu cầu sử dụng ngôn ngữ khác. Giữ ngữ cảnh từ 20 tin nhắn gần nhất để cuộc trò chuyện được liền mạch.";
+const VIETNAMESE_SYSTEM_PROMPT = "Bạn là một trợ lý AI thông thạo tiếng Việt, được tích hợp vào ứng dụng Oranji. Nhiệm vụ của bạn là hỗ trợ người dùng một cách tự nhiên và hữu ích. Bạn có khả năng truy xuất thông tin sản phẩm từ cơ sở dữ liệu D1 và tìm kiếm nội dung tài liệu từ bộ nhớ R2. Hãy luôn trả lời bằng tiếng Việt, trừ khi được yêu cầu sử dụng ngôn ngữ khác. Giữ ngữ cảnh từ 20 tin nhắn gần nhất để cuộc trò chuyện được liền mạch.";
 export class ChatHandler {
   private client: OpenAI;
   private model: string;
@@ -117,7 +117,8 @@ export class ChatHandler {
     const responseMessage = completion.choices[0]?.message;
     if (!responseMessage) {
       const content = 'I apologize, but I encountered an issue processing your request.';
-      return { content, assistantMessage: { id: crypto.randomUUID(), role: 'assistant', content, timestamp: Date.now() } };
+      const assistantMessage: Message = { id: crypto.randomUUID(), role: 'assistant', content, timestamp: Date.now() };
+      return { content, assistantMessage };
     }
     const assistantMessage: Message = { id: crypto.randomUUID(), role: 'assistant', content: responseMessage.content || '', timestamp: Date.now() };
     if (!responseMessage.tool_calls) {

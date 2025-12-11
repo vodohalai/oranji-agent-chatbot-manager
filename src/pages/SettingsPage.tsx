@@ -2,14 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { motion } from 'framer-motion';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Toaster, toast } from 'sonner';
 import { MODELS } from '@/lib/chat';
 import { Settings, Save, Loader2 } from 'lucide-react';
@@ -47,7 +45,7 @@ export function SettingsPage(): JSX.Element {
     setIsSubmitting(true);
     try {
       localStorage.setItem('oranji_settings', JSON.stringify(data));
-      toast.success('Cài đặt đã đ��ợc lưu thành công!');
+      toast.success('Cài đặt đã được lưu thành công!');
     } catch (error) {
       console.error("Failed to save settings to localStorage", error);
       toast.error('Đã xảy ra lỗi khi lưu cài đặt.');
@@ -65,93 +63,81 @@ export function SettingsPage(): JSX.Element {
           </h1>
           <p className="text-muted-foreground mt-2">Quản lý cấu hình chung cho ứng dụng Oranji Agent.</p>
         </header>
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, ease: 'easeOut' }}
-        >
-          <Card className="max-w-2xl mx-auto">
-            <CardHeader>
-              <CardTitle>Cấu hình ứng dụng</CardTitle>
-              <CardDescription>Các thay đổi sẽ được lưu vào bộ nhớ cục bộ của trình duyệt của bạn.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <TooltipProvider>
-                <Form {...form}>
-                  <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-                    <FormField
-                      control={form.control}
-                      name="defaultModel"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Mô hình AI mặc định</FormLabel>
-                          <Select onValueChange={field.onChange} defaultValue={field.value} value={field.value}>
-                            <FormControl>
-                              <SelectTrigger>
-                                <SelectValue placeholder="Chọn một mô hình..." />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              {MODELS.map((model) => (
-                                <SelectItem key={model.id} value={model.id}>
-                                  {model.name}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name="r2PreviewToken"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Token xem trước R2 (Tùy chọn)</FormLabel>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <FormControl>
-                                <Input placeholder="Nhập token của bạn..." {...field} />
-                              </FormControl>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              <p>Token này được s�� dụng để truy cập các tài liệu được bảo vệ trong R2.</p>
-                            </TooltipContent>
-                          </Tooltip>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name="adminName"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Tên quản trị viên</FormLabel>
-                          <FormControl>
-                            <Input placeholder="Tên của bạn" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <div className="flex justify-end">
-                      <Button type="submit" disabled={isSubmitting} className="transition-transform hover:scale-105 active:scale-95">
-                        {isSubmitting ? (
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        ) : (
-                          <Save className="mr-2 h-4 w-4" />
-                        )}
-                        Lưu thay đổi
-                      </Button>
-                    </div>
-                  </form>
-                </Form>
-              </TooltipProvider>
-            </CardContent>
-          </Card>
-        </motion.div>
+        <Card className="max-w-2xl mx-auto">
+          <CardHeader>
+            <CardTitle>Cấu hình ứng dụng</CardTitle>
+            <CardDescription>Các thay đổi sẽ được lưu vào bộ nhớ cục bộ của trình duyệt của bạn.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Form {...form}>
+              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+                <FormField
+                  control={form.control}
+                  name="defaultModel"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Mô hình AI mặc định</FormLabel>
+                      <Select onValueChange={field.onChange} defaultValue={field.value} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Chọn một mô hình..." />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {MODELS.map((model) => (
+                            <SelectItem key={model.id} value={model.id}>
+                              {model.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="r2PreviewToken"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Token xem trước R2 (T��y chọn)</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Nhập token của bạn..." {...field} />
+                      </FormControl>
+                      <p className="text-sm text-muted-foreground">
+                        Token này được sử dụng để truy cập các tài liệu được bảo vệ trong R2.
+                      </p>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="adminName"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Tên quản trị viên</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Tên của bạn" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <div className="flex justify-end">
+                  <Button type="submit" disabled={isSubmitting}>
+                    {isSubmitting ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Save className="mr-2 h-4 w-4" />
+                    )}
+                    Lưu thay đổi
+                  </Button>
+                </div>
+              </form>
+            </Form>
+          </CardContent>
+        </Card>
       </div>
       <Toaster richColors />
     </div>

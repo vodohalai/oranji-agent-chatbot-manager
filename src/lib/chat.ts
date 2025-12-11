@@ -10,10 +10,10 @@ export const MODELS = [
   { id: 'google-ai-studio/gemini-2.0-flash', name: 'Gemini 2.0 Flash' },
 ];
 export const MOCK_PRODUCTS = [
-    { id: '1', name: 'Sản phẩm Oranji', description: 'Trợ lý AI tiếng Việt thông minh', price: 500000, stock_quantity: 100, category: 'AI' },
+    { id: '1', name: 'S��n phẩm Oranji', description: 'Trợ lý AI tiếng Việt thông minh', price: 500000, stock_quantity: 100, category: 'AI' },
     { id: '2', name: 'Gói Cloudflare Worker', description: 'Triển khai ứng dụng serverless tại biên', price: 120000, stock_quantity: 1000, category: 'Infrastructure' },
-    { id: '3', name: 'L��u trữ R2', description: 'Lưu trữ đối tượng tương th��ch S3 với chi phí thấp', price: 5000, stock_quantity: 0, category: 'Storage' },
-    { id: '4', name: 'Cơ sở dữ liệu D1', description: 'Cơ sở dữ liệu SQL serverless', price: 25000, stock_quantity: 0, category: 'Database' },
+    { id: '3', name: 'Lưu trữ R2', description: 'Lưu trữ đối tượng tương thích S3 với chi phí thấp', price: 5000, stock_quantity: 0, category: 'Storage' },
+    { id: '4', name: 'Cơ sở d�� liệu D1', description: 'Cơ sở dữ liệu SQL serverless', price: 25000, stock_quantity: 0, category: 'Database' },
     { id: '5', name: 'Tư vấn triển khai AI', description: 'Dịch vụ tư vấn chuyên nghiệp cho dự án AI', price: 10000000, stock_quantity: 10, category: 'Service' },
 ];
 export const generateSessionTitle = (content?: string): string => {
@@ -98,6 +98,21 @@ class ChatService {
       body: JSON.stringify({ model })
     });
   }
+  async exportSessions(format: 'json' | 'csv'): Promise<{ success: boolean; blob?: Blob; error?: string }> {
+    const res = await this.listSessions();
+    if (!res.success || !res.data) {
+      return { success: false, error: res.error || "No data to export" };
+    }
+    const data = res.data;
+    if (format === 'json') {
+      const json = JSON.stringify(data, null, 2);
+      return { success: true, blob: new Blob([json], { type: 'application/json' }) };
+    }
+    const csvHeader = 'ID,Title,Created,Last Active\n';
+    const csvRows = data.map(s => `${s.id},"${s.title.replace(/"/g, '""')}",${new Date(s.createdAt).toISOString()},${new Date(s.lastActive).toISOString()}`).join('\n');
+    const csv = csvHeader + csvRows;
+    return { success: true, blob: new Blob([csv], { type: 'text/csv;charset=utf-8;' }) };
+  }
   // Admin: Products
   async getProducts() { return this.request<any[]>('/api/admin/products'); }
   async createProduct(data: any) {
@@ -126,5 +141,5 @@ export const formatTime = (timestamp: number): string => new Date(timestamp).toL
 export const renderToolCall = (toolCall: ToolCall): string => {
   if (!toolCall.result) return `⚠️ ${toolCall.name}: No result`;
   if (typeof toolCall.result === 'object' && toolCall.result && 'error' in toolCall.result) return `❌ ${toolCall.name}: ${(toolCall.result as ErrorResult).error}`;
-  return `��� ${toolCall.name}: Executed`;
+  return `✅ ${toolCall.name}: Executed`;
 };
