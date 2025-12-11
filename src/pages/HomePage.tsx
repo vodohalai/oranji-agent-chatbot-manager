@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import { Bot, Plus, Trash2, Settings, Menu, X, MessageSquare } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { chatService, generateSessionTitle, MODELS } from '@/lib/chat';
+import { chatService, MODELS } from '@/lib/chat';
 import type { ChatState, SessionInfo } from '../../worker/types';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { ChatWindow } from '@/components/ChatWindow';
@@ -26,25 +26,16 @@ export function HomePage() {
   const [isLoading, setIsLoading] = useState(false);
   const [sessions, setSessions] = useState<SessionInfo[]>([]);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const loadSessions = useCallback(async (selectSessionId?: string) => {
-    const response = await chatService.listSessions();
-    if (response.success && response.data) {
-      setSessions(response.data);
-      if (selectSessionId) {
-        chatService.switchSession(selectSessionId);
-        await loadCurrentSession(selectSessionId);
-      } else if (response.data.length > 0 && chatService.getSessionId() === 'new') {
-        // If it's a fresh load with existing sessions, select the latest one
-        const latestSession = response.data[0];
-        chatService.switchSession(latestSession.id);
-        await loadCurrentSession(latestSession.id);
-      } else {
-        await loadCurrentSession(chatService.getSessionId());
-      }
-    } else {
-      // If loading sessions fails, ensure we still load the current one
-      await loadCurrentSession(chatService.getSessionId());
-    }
+  const handleNewSession = useCallback(() => {
+    chatService.newSession();
+    setChatState(prev => ({
+      ...prev,
+      messages: [],
+      sessionId: 'new',
+      isProcessing: false,
+      streamingMessage: ''
+    }));
+    setIsSidebarOpen(false);
   }, []);
   const loadCurrentSession = useCallback(async (sessionId: string) => {
     if (!sessionId || sessionId === 'new') {
@@ -62,10 +53,26 @@ export function HomePage() {
     if (response.success && response.data) {
       setChatState(response.data);
     } else {
-      // Handle case where session might not exist on server
+      toast.error("Không thể tải phiên. Bắt đầu phiên mới.");
       handleNewSession();
     }
-  }, []);
+  }, [handleNewSession]);
+  const loadSessions = useCallback(async (selectSessionId?: string) => {
+    const response = await chatService.listSessions();
+    if (response.success && response.data) {
+      setSessions(response.data);
+      if (selectSessionId) {
+        await loadCurrentSession(selectSessionId);
+      } else if (response.data.length > 0 && chatService.getSessionId() === 'new') {
+        const latestSession = response.data[0];
+        await loadCurrentSession(latestSession.id);
+      } else {
+        await loadCurrentSession(chatService.getSessionId());
+      }
+    } else {
+      await loadCurrentSession(chatService.getSessionId());
+    }
+  }, [loadCurrentSession]);
   useEffect(() => {
     loadSessions();
   }, [loadSessions]);
@@ -108,11 +115,6 @@ export function HomePage() {
       await chatService.updateModel(model);
     }
   };
-  const handleNewSession = () => {
-    chatService.newSession();
-    loadCurrentSession('new');
-    setIsSidebarOpen(false);
-  };
   const handleSwitchSession = async (sessionId: string) => {
     await loadCurrentSession(sessionId);
     setIsSidebarOpen(false);
@@ -148,7 +150,7 @@ export function HomePage() {
         </Button>
       </div>
       <Button onClick={handleNewSession} className="w-full mb-4">
-        <Plus className="mr-2 h-4 w-4" /> Cuộc trò chuy��n mới
+        <Plus className="mr-2 h-4 w-4" /> Cuộc trò chuyện mới
       </Button>
       <div className="flex-1 overflow-y-auto -mr-2 pr-2 space-y-2">
         {sessions.map(session => (
@@ -226,7 +228,7 @@ export function HomePage() {
             />
           </div>
           <footer className="text-center text-xs text-muted-foreground p-2">
-            Lưu ý: Hệ thống AI có hạn mức yêu cầu chung; số lần gọi API có thể bị giới hạn. Built with ❤️ at Cloudflare.
+            Lưu ý: Hệ thống AI có h��n mức yêu cầu chung; số lần gọi API có thể bị giới hạn. Built with ❤️ at Cloudflare.
           </footer>
         </main>
       </div>

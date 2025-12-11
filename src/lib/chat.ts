@@ -1,235 +1,117 @@
 import type { Message, ChatState, ToolCall, WeatherResult, MCPResult, ErrorResult, SessionInfo } from '../../worker/types';
-
 export interface ChatResponse {
   success: boolean;
   data?: ChatState;
   error?: string;
 }
-
 export const MODELS = [
   { id: 'google-ai-studio/gemini-2.5-flash', name: 'Gemini 2.5 Flash' },
   { id: 'google-ai-studio/gemini-2.5-pro', name: 'Gemini 2.5 Pro' },
   { id: 'google-ai-studio/gemini-2.0-flash', name: 'Gemini 2.0 Flash' },
 ];
-
+export const MOCK_PRODUCTS = [
+    { id: '1', name: 'S���n phẩm Oranji', description: 'Trợ lý AI tiếng Việt thông minh', price: 500000, stock_quantity: 100, category: 'AI' },
+    { id: '2', name: 'Gói Cloudflare Worker', description: 'Triển khai ứng dụng serverless tại biên', price: 120000, stock_quantity: 1000, category: 'Infrastructure' },
+    { id: '3', name: 'Lưu trữ R2', description: 'Lưu trữ đối tượng tương thích S3 với chi phí thấp', price: 5000, stock_quantity: 0, category: 'Storage' },
+    { id: '4', name: 'Cơ sở dữ liệu D1', description: 'Cơ sở dữ liệu SQL serverless', price: 25000, stock_quantity: 0, category: 'Database' },
+    { id: '5', name: 'Tư vấn triển khai AI', description: 'Dịch vụ tư vấn chuyên nghiệp cho dự án AI', price: 10000000, stock_quantity: 10, category: 'Service' },
+];
 class ChatService {
   private sessionId: string;
   private baseUrl: string;
-
   constructor() {
-    this.sessionId = crypto.randomUUID();
+    this.sessionId = 'new';
     this.baseUrl = `/api/chat/${this.sessionId}`;
   }
-
-  async sendMessage(
-    message: string, 
-    model?: string, 
-    onChunk?: (chunk: string) => void
-  ): Promise<ChatResponse> {
+  private async request<T>(url: string, options?: RequestInit): Promise<{ success: boolean; data?: T; error?: string }> {
+    try {
+      const response = await fetch(url, options);
+      const data = await response.json();
+      if (!response.ok) {
+        return { success: false, error: data.error || `HTTP ${response.status}` };
+      }
+      return data;
+    } catch (error) {
+      console.error(`Request to ${url} failed:`, error);
+      return { success: false, error: error instanceof Error ? error.message : 'Network error' };
+    }
+  }
+  async sendMessage(message: string, model?: string, onChunk?: (chunk: string) => void): Promise<ChatResponse> {
     try {
       const response = await fetch(`${this.baseUrl}/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message, model, stream: !!onChunk }),
       });
-      
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
       if (onChunk && response.body) {
-        // Handle streaming response
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
-        let fullResponse = '';
-
-        try {
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-
-            const chunk = decoder.decode(value, { stream: true });
-            if (chunk) {
-              fullResponse += chunk;
-              onChunk(chunk);
-            }
-          }
-        } finally {
-          reader.releaseLock();
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          onChunk(decoder.decode(value, { stream: true }));
         }
-
         return { success: true };
       }
-      
-      // Non-streaming response
       return await response.json();
     } catch (error) {
-      console.error('Failed to send message:', error);
       return { success: false, error: 'Failed to send message' };
     }
   }
-
   async getMessages(): Promise<ChatResponse> {
-    try {
-      const response = await fetch(`${this.baseUrl}/messages`);
-      
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-      
-      return await response.json();
-    } catch (error) {
-      console.error('Failed to get messages:', error);
-      return { success: false, error: 'Failed to load messages' };
-    }
+    return this.request<ChatState>(`${this.baseUrl}/messages`);
   }
-
-  async clearMessages(): Promise<ChatResponse> {
-    try {
-      const response = await fetch(`${this.baseUrl}/clear`, {
-        method: 'DELETE'
-      });
-      
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-      
-      return await response.json();
-    } catch (error) {
-      console.error('Failed to clear messages:', error);
-      return { success: false, error: 'Failed to clear messages' };
-    }
-  }
-
-  getSessionId(): string {
-    return this.sessionId;
-  }
-
-  newSession(): void {
-    this.sessionId = crypto.randomUUID();
-    this.baseUrl = `/api/chat/${this.sessionId}`;
-  }
-
+  getSessionId(): string { return this.sessionId; }
+  newSession(): void { this.switchSession('new'); }
   switchSession(sessionId: string): void {
     this.sessionId = sessionId;
     this.baseUrl = `/api/chat/${sessionId}`;
   }
-
-  // Session Management Methods
-  async createSession(title?: string, sessionId?: string, firstMessage?: string): Promise<{ success: boolean; data?: { sessionId: string; title: string }; error?: string }> {
-    try {
-      const response = await fetch('/api/sessions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title, sessionId, firstMessage })
-      });
-      return await response.json();
-    } catch (error) {
-      return { success: false, error: 'Failed to create session' };
-    }
+  // Session Management
+  async createSession(title?: string, sessionId?: string, firstMessage?: string) {
+    return this.request<{ sessionId: string; title: string }>('/api/sessions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title, sessionId, firstMessage })
+    });
   }
-
-  async listSessions(): Promise<{ success: boolean; data?: SessionInfo[]; error?: string }> {
-    try {
-      const response = await fetch('/api/sessions');
-      return await response.json();
-    } catch (error) {
-      return { success: false, error: 'Failed to list sessions' };
-    }
+  async listSessions() { return this.request<SessionInfo[]>('/api/sessions'); }
+  async deleteSession(sessionId: string) { return this.request(`/api/sessions/${sessionId}`, { method: 'DELETE' }); }
+  async updateModel(model: string) {
+    return this.request<ChatState>(`${this.baseUrl}/model`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model })
+    });
   }
-
-  async deleteSession(sessionId: string): Promise<{ success: boolean; error?: string }> {
-    try {
-      const response = await fetch(`/api/sessions/${sessionId}`, { method: 'DELETE' });
-      return await response.json();
-    } catch (error) {
-      return { success: false, error: 'Failed to delete session' };
-    }
+  // Admin: Products
+  async getProducts() { return this.request<any[]>('/api/admin/products'); }
+  async createProduct(data: any) {
+    return this.request('/api/admin/products', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
   }
-
-  async updateSessionTitle(sessionId: string, title: string): Promise<{ success: boolean; error?: string }> {
-    try {
-      const response = await fetch(`/api/sessions/${sessionId}/title`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title })
-      });
-      return await response.json();
-    } catch (error) {
-      return { success: false, error: 'Failed to update session title' };
-    }
+  async updateProduct(id: string, data: any) {
+    return this.request(`/api/admin/products/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
   }
-
-  async clearAllSessions(): Promise<{ success: boolean; data?: { deletedCount: number }; error?: string }> {
-    try {
-      const response = await fetch('/api/sessions', { method: 'DELETE' });
-      return await response.json();
-    } catch (error) {
-      return { success: false, error: 'Failed to clear all sessions' };
-    }
+  async deleteProduct(id: string) { return this.request(`/api/admin/products/${id}`, { method: 'DELETE' }); }
+  // Admin: Documents
+  async getDocuments() { return this.request<{ name: string; size: number; uploaded: string }[]>('/api/admin/documents'); }
+  async uploadDocument(file: File) {
+    const formData = new FormData();
+    formData.append('file', file);
+    return this.request('/api/admin/documents', { method: 'POST', body: formData });
   }
-
-  async updateModel(model: string): Promise<ChatResponse> {
-    try {
-      const response = await fetch(`${this.baseUrl}/model`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model })
-      });
-      
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-      
-      return await response.json();
-    } catch (error) {
-      console.error('Failed to update model:', error);
-      return { success: false, error: 'Failed to update model' };
-    }
+  async deleteDocument(key: string) { return this.request(`/api/admin/documents/${encodeURIComponent(key)}`, { method: 'DELETE' }); }
+  // Admin: System Prompt
+  async getSystemPrompt() { return this.request<{ prompt: string }>('/api/admin/system-prompt'); }
+  async updateSystemPrompt(prompt: string) {
+    return this.request('/api/admin/system-prompt', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt }) });
   }
 }
-
 export const chatService = new ChatService();
-
-export const formatTime = (timestamp: number): string => {
-  return new Date(timestamp).toLocaleTimeString([], { 
-    hour: '2-digit', 
-    minute: '2-digit' 
-  });
-};
-
-export const generateSessionTitle = (firstUserMessage?: string): string => {
-  const now = new Date();
-  const dateTime = now.toLocaleString([], {
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit'
-  });
-
-  if (!firstUserMessage || !firstUserMessage.trim()) {
-    return `Chat ${dateTime}`;
-  }
-
-  // Clean and truncate the message
-  const cleanMessage = firstUserMessage.trim().replace(/\s+/g, ' ');
-  const truncated = cleanMessage.length > 40 
-    ? cleanMessage.slice(0, 37) + '...' 
-    : cleanMessage;
-
-  return `${truncated} • ${dateTime}`;
-};
-
+export const formatTime = (timestamp: number): string => new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 export const renderToolCall = (toolCall: ToolCall): string => {
-  const result = toolCall.result as WeatherResult | MCPResult | ErrorResult | undefined;
-  
-  if (!result) return `⚠️ ${toolCall.name}: No result`;
-  if ('error' in result) return `❌ ${toolCall.name}: ${result.error}`;
-  if ('content' in result) return `🔧 ${toolCall.name}: Executed`;
-  if (toolCall.name === 'get_weather') {
-    const weather = result as WeatherResult;
-    return `🌤️ Weather in ${weather.location}: ${weather.temperature}°C, ${weather.condition}`;
-  }
-
-  return `🔧 ${toolCall.name}: Done`;
+  if (!toolCall.result) return `⚠️ ${toolCall.name}: No result`;
+  if (typeof toolCall.result === 'object' && toolCall.result && 'error' in toolCall.result) return `❌ ${toolCall.name}: ${(toolCall.result as ErrorResult).error}`;
+  return `🔧 ${toolCall.name}: Executed`;
 };

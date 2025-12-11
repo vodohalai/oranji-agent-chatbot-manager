@@ -2,211 +2,115 @@ import { Hono } from "hono";
 import { getAgentByName } from 'agents';
 import { ChatAgent } from './agent';
 import { API_RESPONSES } from './config';
-import { Env, getAppController, registerSession, unregisterSession } from "./core-utils";
-/**
- * DO NOT MODIFY THIS FUNCTION. Only for your reference.
- */
+import { Env, getAppController, registerSession, unregisterSession, getSystemPrompt } from "./core-utils";
 export function coreRoutes(app: Hono<{ Bindings: Env }>) {
-    // Use this API for conversations. **DO NOT MODIFY**
     app.all('/api/chat/:sessionId/*', async (c) => {
         try {
-        const sessionId = c.req.param('sessionId');
-        const agent = await getAgentByName<Env, ChatAgent>(c.env.CHAT_AGENT, sessionId); // Get existing agent or create a new one if it doesn't exist, with sessionId as the name
-        const url = new URL(c.req.url);
-        url.pathname = url.pathname.replace(`/api/chat/${sessionId}`, '');
-        return agent.fetch(new Request(url.toString(), {
-            method: c.req.method,
-            headers: c.req.header(),
-            body: c.req.method === 'GET' || c.req.method === 'DELETE' ? undefined : c.req.raw.body
-        }));
+            const sessionId = c.req.param('sessionId');
+            const agent = await getAgentByName<Env, ChatAgent>(c.env.CHAT_AGENT, sessionId);
+            const url = new URL(c.req.url);
+            url.pathname = url.pathname.replace(`/api/chat/${sessionId}`, '');
+            return agent.fetch(new Request(url.toString(), {
+                method: c.req.method,
+                headers: c.req.header(),
+                body: c.req.method === 'GET' || c.req.method === 'DELETE' ? undefined : c.req.raw.body
+            }));
         } catch (error) {
-        console.error('Agent routing error:', error);
-        return c.json({
-            success: false,
-            error: API_RESPONSES.AGENT_ROUTING_FAILED
-        }, { status: 500 });
+            console.error('Agent routing error:', error);
+            return c.json({ success: false, error: API_RESPONSES.AGENT_ROUTING_FAILED }, { status: 500 });
         }
     });
 }
 export function userRoutes(app: Hono<{ Bindings: Env }>) {
-    // Add your routes here
-    /**
-     * List all chat sessions
-     * GET /api/sessions
-     */
+    // Session Management
     app.get('/api/sessions', async (c) => {
-        try {
-            const controller = getAppController(c.env);
-            const sessions = await controller.listSessions();
-            return c.json({ success: true, data: sessions });
-        } catch (error) {
-            console.error('Failed to list sessions:', error);
-            return c.json({
-                success: false,
-                error: 'Failed to retrieve sessions'
-            }, { status: 500 });
-        }
+        const controller = getAppController(c.env);
+        const sessions = await controller.listSessions();
+        return c.json({ success: true, data: sessions });
     });
-    /**
-     * Create a new chat session
-     * POST /api/sessions
-     * Body: { title?: string, sessionId?: string }
-     */
     app.post('/api/sessions', async (c) => {
-        try {
-            const body = await c.req.json().catch(() => ({}));
-            const { title, sessionId: providedSessionId, firstMessage } = body;
-            const sessionId = providedSessionId || crypto.randomUUID();
-            // Generate better session titles
-            let sessionTitle = title;
-            if (!sessionTitle) {
-                const now = new Date();
-                const dateTime = now.toLocaleString([], {
-                    month: '2-digit',
-                    day: '2-digit',
-                    hour: '2-digit',
-                    minute: '2-digit'
-                });
-                if (firstMessage && firstMessage.trim()) {
-                    const cleanMessage = firstMessage.trim().replace(/\s+/g, ' ');
-                    const truncated = cleanMessage.length > 40
-                        ? cleanMessage.slice(0, 37) + '...'
-                        : cleanMessage;
-                    sessionTitle = `${truncated}`;
-                } else {
-                    sessionTitle = `Trò chuyện ${dateTime}`;
-                }
-            }
-            await registerSession(c.env, sessionId, sessionTitle);
-            return c.json({
-                success: true,
-                data: { sessionId, title: sessionTitle }
-            });
-        } catch (error) {
-            console.error('Failed to create session:', error);
-            return c.json({
-                success: false,
-                error: 'Failed to create session'
-            }, { status: 500 });
-        }
-    });
-    /**
-     * Delete a chat session
-     * DELETE /api/sessions/:sessionId
-     */
-    app.delete('/api/sessions/:sessionId', async (c) => {
-        try {
-            const sessionId = c.req.param('sessionId');
-            const deleted = await unregisterSession(c.env, sessionId);
-            if (!deleted) {
-                return c.json({
-                    success: false,
-                    error: 'Session not found'
-                }, { status: 404 });
-            }
-            return c.json({ success: true, data: { deleted: true } });
-        } catch (error) {
-            console.error('Failed to delete session:', error);
-            return c.json({
-                success: false,
-                error: 'Failed to delete session'
-            }, { status: 500 });
-        }
-    });
-    /**
-     * Update session title
-     * PUT /api/sessions/:sessionId/title
-     * Body: { title: string }
-     */
-    app.put('/api/sessions/:sessionId/title', async (c) => {
-        try {
-            const sessionId = c.req.param('sessionId');
-            const { title } = await c.req.json();
-            if (!title || typeof title !== 'string') {
-                return c.json({
-                    success: false,
-                    error: 'Title is required'
-                }, { status: 400 });
-            }
-            const controller = getAppController(c.env);
-            const updated = await controller.updateSessionTitle(sessionId, title);
-            if (!updated) {
-                return c.json({
-                    success: false,
-                    error: 'Session not found'
-                }, { status: 404 });
-            }
-            return c.json({ success: true, data: { title } });
-        } catch (error) {
-            console.error('Failed to update session title:', error);
-            return c.json({
-                success: false,
-                error: 'Failed to update session title'
-            }, { status: 500 });
-        }
-    });
-    /**
-     * Get session count and stats
-     * GET /api/sessions/stats
-     */
-    app.get('/api/sessions/stats', async (c) => {
-        try {
-            const controller = getAppController(c.env);
-            const count = await controller.getSessionCount();
-            return c.json({
-                success: true,
-                data: { totalSessions: count }
-            });
-        } catch (error) {
-            console.error('Failed to get session stats:', error);
-            return c.json({
-                success: false,
-                error: 'Failed to retrieve session stats'
-            }, { status: 500 });
-        }
-    });
-    /**
-     * Clear all chat sessions
-     * DELETE /api/sessions
-     */
-    app.delete('/api/sessions', async (c) => {
-        try {
-            const controller = getAppController(c.env);
-            const deletedCount = await controller.clearAllSessions();
-            return c.json({
-                success: true,
-                data: { deletedCount }
-            });
-        } catch (error) {
-            console.error('Failed to clear all sessions:', error);
-            return c.json({
-                success: false,
-                error: 'Failed to clear all sessions'
-            }, { status: 500 });
-        }
-    });
-    // --- Messenger Webhook Mock Routes (Phase 1) ---
-    /**
-     * Mock route to test webhook connectivity from admin UI.
-     * In Phase 3, this will be part of the actual webhook verification.
-     * GET /api/messenger/test
-     */
-    app.get('/api/messenger/test', (c) => {
-        // In a real scenario, you'd check for FB_VERIFY_TOKEN.
-        // For Phase 1, we always return success.
-        console.log('Messenger webhook test endpoint hit.');
-        return c.json({ success: true, message: 'Mock webhook connection successful!' });
-    });
-    /**
-     * Mock route to send a test message from admin UI.
-     * In Phase 3, this will use the FB_PAGE_TOKEN to send a real message.
-     * POST /api/messenger/send
-     */
-    app.post('/api/messenger/send', async (c) => {
         const body = await c.req.json().catch(() => ({}));
-        console.log('Mock sending message:', body);
-        // In a real scenario, you'd use fetch with FB_PAGE_TOKEN to call the Messenger API.
-        // For Phase 1, we just log and return success.
-        return c.json({ success: true, message: 'Mock test message sent successfully!' });
+        const { title, sessionId: providedSessionId, firstMessage } = body;
+        const sessionId = providedSessionId || crypto.randomUUID();
+        let sessionTitle = title || `Trò chuyện lúc ${new Date().toLocaleTimeString()}`;
+        if (!title && firstMessage) {
+            sessionTitle = firstMessage.trim().substring(0, 40) + '...';
+        }
+        await registerSession(c.env, sessionId, sessionTitle);
+        return c.json({ success: true, data: { sessionId, title: sessionTitle } });
+    });
+    app.delete('/api/sessions/:sessionId', async (c) => {
+        const sessionId = c.req.param('sessionId');
+        const deleted = await unregisterSession(c.env, sessionId);
+        return c.json({ success: deleted, data: { deleted } });
+    });
+    // Admin: Products (D1)
+    app.get('/api/admin/products', async (c) => {
+        if (!c.env.DB) return c.json({ success: false, error: 'Database not configured' }, 500);
+        const { results } = await c.env.DB.prepare('SELECT * FROM products_info ORDER BY name').all();
+        return c.json({ success: true, data: results });
+    });
+    app.post('/api/admin/products', async (c) => {
+        if (!c.env.DB) return c.json({ success: false, error: 'Database not configured' }, 500);
+        const product = await c.req.json();
+        const id = product.id || crypto.randomUUID();
+        await c.env.DB.prepare(
+            'INSERT INTO products_info (id, name, description, price, stock_quantity, category, metadata) VALUES (?, ?, ?, ?, ?, ?, ?)'
+        ).bind(id, product.name, product.description, product.price, product.stock_quantity, product.category, JSON.stringify(product.metadata || {})).run();
+        return c.json({ success: true, data: { ...product, id } });
+    });
+    app.put('/api/admin/products/:id', async (c) => {
+        if (!c.env.DB) return c.json({ success: false, error: 'Database not configured' }, 500);
+        const id = c.req.param('id');
+        const product = await c.req.json();
+        await c.env.DB.prepare(
+            'UPDATE products_info SET name=?, description=?, price=?, stock_quantity=?, category=?, metadata=? WHERE id=?'
+        ).bind(product.name, product.description, product.price, product.stock_quantity, product.category, JSON.stringify(product.metadata || {}), id).run();
+        return c.json({ success: true, data: product });
+    });
+    app.delete('/api/admin/products/:id', async (c) => {
+        if (!c.env.DB) return c.json({ success: false, error: 'Database not configured' }, 500);
+        const id = c.req.param('id');
+        await c.env.DB.prepare('DELETE FROM products_info WHERE id = ?').bind(id).run();
+        return c.json({ success: true });
+    });
+    // Admin: Documents (R2)
+    app.get('/api/admin/documents', async (c) => {
+        if (!c.env.R2_DOCS) return c.json({ success: false, error: 'R2 Storage not configured' }, 500);
+        const listed = await c.env.R2_DOCS.list();
+        const documents = listed.objects.map(obj => ({
+            name: obj.key,
+            size: obj.size,
+            uploaded: obj.uploaded.toISOString(),
+        }));
+        return c.json({ success: true, data: documents });
+    });
+    app.post('/api/admin/documents', async (c) => {
+        if (!c.env.R2_DOCS) return c.json({ success: false, error: 'R2 Storage not configured' }, 500);
+        const formData = await c.req.formData();
+        const file = formData.get('file') as File;
+        if (!file) return c.json({ success: false, error: 'File not provided' }, 400);
+        await c.env.R2_DOCS.put(file.name, file.stream(), {
+            httpMetadata: { contentType: file.type },
+        });
+        return c.json({ success: true, data: { name: file.name, size: file.size } });
+    });
+    app.delete('/api/admin/documents/:key', async (c) => {
+        if (!c.env.R2_DOCS) return c.json({ success: false, error: 'R2 Storage not configured' }, 500);
+        const key = decodeURIComponent(c.req.param('key'));
+        await c.env.R2_DOCS.delete(key);
+        return c.json({ success: true });
+    });
+    // Admin: System Prompt
+    app.get('/api/admin/system-prompt', async (c) => {
+        const prompt = await getSystemPrompt(c.env);
+        return c.json({ success: true, data: { prompt } });
+    });
+    app.post('/api/admin/system-prompt', async (c) => {
+        const { prompt } = await c.req.json();
+        if (!prompt) return c.json({ success: false, error: 'Prompt is required' }, 400);
+        const controller = getAppController(c.env);
+        await controller.ctx.storage.put('system_prompt', prompt);
+        return c.json({ success: true });
     });
 }
