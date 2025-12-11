@@ -100,7 +100,7 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
         const { title, sessionId: providedSessionId, firstMessage } = await c.req.json();
         const sessionId = providedSessionId || crypto.randomUUID();
         const now = Date.now();
-        const sessionTitle = title || (firstMessage ? (firstMessage.trim().substring(0, 40) + '...') : `Trò chuyện lúc ${new Date(now).toLocaleTimeString()}`);
+        const sessionTitle = title || (firstMessage ? (firstMessage.trim().substring(0, 40) + '...') : `Trò chuyện l��c ${new Date(now).toLocaleTimeString()}`);
         const session: SessionInfo = { id: sessionId, title: sessionTitle, createdAt: now, lastActive: now };
         if (!c.env.DB) {
             mockSessions.set(sessionId, session);
@@ -228,22 +228,25 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
                     const chatBody = {
                         message: messageText,
                         model: 'google-ai-studio/gemini-2.5-flash',
-                        stream: true
+                        stream: false // Use non-streaming for webhook replies for simplicity
                     };
                     const agentUrl = new URL(c.req.url);
                     agentUrl.pathname = `/api/chat/${sessionId}/chat`;
+                    // We don't want to wait for the full response here, but for simplicity we will.
+                    // In a production scenario, you might offload this to a queue.
                     const agentRes = await fetch(agentUrl.toString(), {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(chatBody)
                     });
-                    let streamText = await agentRes.text().then(text => text.trim()).catch(() => '');
-                    if (streamText.length === 0) {
-                        streamText = 'Xin lỗi, không thể xử lý tin nhắn lúc này.';
+                    let replyText = 'Xin lỗi, tôi không thể xử lý yêu c��u của bạn lúc này.';
+                    if (agentRes.ok) {
+                        const agentJson = await agentRes.json<{data: {messages: Message[]}}>();
+                        replyText = agentJson.data.messages[agentJson.data.messages.length - 1].content || replyText;
                     }
                     const reply = {
                         recipient: { id: senderId },
-                        message: { text: streamText }
+                        message: { text: replyText }
                     };
                     await fetch(`https://graph.facebook.com/v18.0/me/messages?access_token=${c.env.FB_PAGE_TOKEN}`, {
                         method: 'POST',

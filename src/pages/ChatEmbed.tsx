@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { motion } from 'framer-motion';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { MessageSquare } from 'lucide-react';
@@ -69,9 +70,11 @@ export function ChatEmbed(): JSX.Element {
     <div className="fixed bottom-5 right-5 z-50">
       <Sheet open={isOpen} onOpenChange={setIsOpen}>
         <SheetTrigger asChild>
-          <Button size="lg" className="rounded-full w-16 h-16 shadow-lg btn-gradient">
-            <MessageSquare className="w-8 h-8" />
-          </Button>
+          <motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}>
+            <Button size="lg" className="rounded-full w-16 h-16 shadow-lg btn-gradient" aria-label="Open chat widget">
+              <MessageSquare className="w-8 h-8" />
+            </Button>
+          </motion.div>
         </SheetTrigger>
         <SheetContent className="w-full sm:max-w-md p-0 flex flex-col">
           <SheetHeader className="p-4 border-b">
