@@ -53,7 +53,7 @@ export function HomePage() {
     if (response.success && response.data) {
       setChatState(response.data);
     } else {
-      toast.error("Không thể tải phiên. Bắt đầu phiên mới.");
+      toast.error("Không thể t���i phiên. Bắt đầu phiên mới.");
       handleNewSession();
     }
   }, [handleNewSession]);
@@ -177,59 +177,63 @@ export function HomePage() {
       </div>
       <div className="mt-auto pt-4 border-t">
         <Button variant="ghost" className="w-full justify-start">
-          <Settings className="mr-2 h-4 w-4" /> Cài đặt
+          <Settings className="mr-2 h-4 w-4" /> C��i đặt
         </Button>
       </div>
     </aside>
   );
   return (
     <>
-      <div className="h-screen w-screen flex bg-secondary overflow-hidden">
+      <div className="h-[100vh] w-screen flex bg-secondary overflow-hidden">
         <div className="hidden lg:block">
           <SessionSidebar />
         </div>
         <main className="flex-1 flex flex-col relative h-full">
           <div className="absolute inset-0 bg-gradient-to-br from-[#F38020]/5 via-transparent to-[#D14615]/5" />
-          <header className="flex items-center justify-between p-2 border-b bg-background/50 backdrop-blur-sm z-10">
-            <Sheet open={isSidebarOpen} onOpenChange={setIsSidebarOpen}>
-              <SheetTrigger asChild>
-                <Button variant="ghost" size="icon" className="lg:hidden">
-                  <Menu />
-                </Button>
-              </SheetTrigger>
-              <SheetContent side="left" className="p-0 w-80">
-                <SessionSidebar />
-              </SheetContent>
-            </Sheet>
-            <div className="flex-1 flex justify-center">
-              <Select value={chatState.model} onValueChange={handleModelChange}>
-                <SelectTrigger className="w-auto md:w-[200px] text-sm">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {MODELS.map((model) => (
-                    <SelectItem key={model.id} value={model.id}>
-                      {model.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full h-full flex flex-col">
+            <div className="py-8 md:py-10 lg:py-12 h-full flex flex-col">
+              <header className="flex items-center justify-between p-2 border-b bg-background/50 backdrop-blur-sm z-10 -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8">
+                <Sheet open={isSidebarOpen} onOpenChange={setIsSidebarOpen}>
+                  <SheetTrigger asChild>
+                    <Button variant="ghost" size="icon" className="lg:hidden">
+                      <Menu />
+                    </Button>
+                  </SheetTrigger>
+                  <SheetContent side="left" className="p-0 w-80">
+                    <SessionSidebar />
+                  </SheetContent>
+                </Sheet>
+                <div className="flex-1 flex justify-center">
+                  <Select value={chatState.model} onValueChange={handleModelChange}>
+                    <SelectTrigger className="w-auto md:w-[200px] text-sm">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {MODELS.map((model) => (
+                        <SelectItem key={model.id} value={model.id}>
+                          {model.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <ThemeToggle className="relative top-0 right-0" />
+              </header>
+              <div className="flex-1 overflow-hidden pt-4">
+                <ChatWindow
+                  chatState={chatState}
+                  input={input}
+                  isLoading={isLoading}
+                  onInputChange={(e) => setInput(e.target.value)}
+                  onSendMessage={handleSubmit}
+                  onKeyDown={handleKeyDown}
+                />
+              </div>
+              <footer className="text-center text-xs text-muted-foreground p-2">
+                Lưu ý: Hệ thống AI có hạn mức yêu cầu chung; số lần gọi API có thể bị giới hạn. Built with ❤️ at Cloudflare.
+              </footer>
             </div>
-            <ThemeToggle className="relative top-0 right-0" />
-          </header>
-          <div className="flex-1 overflow-hidden p-4">
-            <ChatWindow
-              chatState={chatState}
-              input={input}
-              isLoading={isLoading}
-              onInputChange={(e) => setInput(e.target.value)}
-              onSendMessage={handleSubmit}
-              onKeyDown={handleKeyDown}
-            />
           </div>
-          <footer className="text-center text-xs text-muted-foreground p-2">
-            Lưu ý: Hệ thống AI có h��n mức yêu cầu chung; số lần gọi API có thể bị giới hạn. Built with ❤️ at Cloudflare.
-          </footer>
         </main>
       </div>
       <Toaster richColors />

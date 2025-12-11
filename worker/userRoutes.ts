@@ -157,7 +157,10 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(chatBody)
                     });
-                    const streamText = await agentRes.text(); // Collect the full streamed response
+                    let streamText = await agentRes.text().then(text => text.trim()).catch(() => '');
+                    if (streamText.length === 0) {
+                        streamText = 'Xin lỗi, không thể xử lý tin nhắn lúc này.';
+                    }
                     const reply = {
                         recipient: { id: senderId },
                         message: { text: streamText }
