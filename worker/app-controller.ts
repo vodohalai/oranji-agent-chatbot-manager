@@ -13,6 +13,11 @@ export class AppController extends DurableObject<Env> {
         const prompt = await this.ctx.storage.get<string>('system_prompt');
         return Response.json({ prompt });
     }
+    if (url.pathname === '/postSystemPrompt' && request.method === 'POST') {
+        const { prompt } = await request.json<{prompt: string}>();
+        await this.ctx.storage.put('system_prompt', prompt);
+        return new Response('OK');
+    }
     return new Response('Not found', { status: 404 });
   }
   private async ensureLoaded(): Promise<void> {
@@ -72,11 +77,9 @@ export class AppController extends DurableObject<Env> {
     await this.ensureLoaded();
     return this.sessions.get(sessionId) || null;
   }
-  async clearAllSessions(): Promise<number> {
+  async clearAllSessions(): Promise<void> {
     await this.ensureLoaded();
-    const count = this.sessions.size;
     this.sessions.clear();
     await this.persist();
-    return count;
   }
 }

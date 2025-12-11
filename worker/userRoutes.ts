@@ -39,6 +39,11 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
         await registerSession(c.env, sessionId, sessionTitle);
         return c.json({ success: true, data: { sessionId, title: sessionTitle } });
     });
+    app.delete('/api/sessions/all', async (c) => {
+        const controller = getAppController(c.env);
+        await controller.clearAllSessions();
+        return c.json({ success: true });
+    });
     app.delete('/api/sessions/:sessionId', async (c) => {
         const sessionId = c.req.param('sessionId');
         const deleted = await unregisterSession(c.env, sessionId);
@@ -108,9 +113,63 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     });
     app.post('/api/admin/system-prompt', async (c) => {
         const { prompt } = await c.req.json();
-        if (!prompt) return c.json({ success: false, error: 'Prompt is required' }, 400);
+        if (typeof prompt !== 'string') return c.json({ success: false, error: 'Prompt is required' }, 400);
         const controller = getAppController(c.env);
-        await controller.ctx.storage.put('system_prompt', prompt);
+        await controller.fetch(new Request('http://do/postSystemPrompt', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ prompt })
+        }));
         return c.json({ success: true });
+    });
+    // Messenger Webhook
+    app.get('/api/messenger/webhook', async (c) => {
+        const url = new URL(c.req.url);
+        const mode = url.searchParams.get('hub.mode');
+        const token = url.searchParams.get('hub.verify_token');
+        const challenge = url.searchParams.get('hub.challenge');
+        if (mode === 'subscribe' && token === c.env.FB_VERIFY_TOKEN) {
+            console.log('Webhook verified!');
+            return new Response(challenge, { status: 200 });
+        }
+        console.warn('Webhook verification failed.');
+        return c.text('Forbidden', 403);
+    });
+    app.post('/api/messenger/webhook', async (c) => {
+        const body: any = await c.req.json();
+        if (body.object !== 'page') return c.text('OK', 200);
+        for (const entry of body.entry) {
+            for (const event of entry.messaging) {
+                if (event.message && event.sender) {
+                    const senderId = event.sender.id;
+                    const messageText = event.message.text;
+                    const sessionId = `fb-${senderId}`; // Map senderId to a unique sessionId
+                    const chatBody = {
+                        message: messageText,
+                        sender_id: senderId,
+                        model: 'google-ai-studio/gemini-2.5-flash',
+                        stream: true
+                    };
+                    const agentUrl = new URL(c.req.url);
+                    agentUrl.pathname = `/api/chat/${sessionId}/chat`;
+                    const agentRes = await fetch(agentUrl.toString(), {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(chatBody)
+                    });
+                    const streamText = await agentRes.text(); // Collect the full streamed response
+                    const reply = {
+                        recipient: { id: senderId },
+                        message: { text: streamText }
+                    };
+                    await fetch(`https://graph.facebook.com/v18.0/me/messages?access_token=${c.env.FB_PAGE_TOKEN}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(reply)
+                    });
+                }
+            }
+        }
+        return c.text('OK', 200);
     });
 }

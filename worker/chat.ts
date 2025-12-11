@@ -3,7 +3,7 @@ import type { Message, ToolCall } from './types';
 import { getToolDefinitions, executeTool } from './tools';
 import { ChatCompletionMessageFunctionToolCall } from 'openai/resources/index.mjs';
 import type { Env } from './core-utils';
-const VIETNAMESE_SYSTEM_PROMPT = "Bạn là một trợ lý AI thông thạo tiếng Việt, được tích hợp vào ứng dụng Oranji. Nhiệm vụ của bạn là hỗ trợ người dùng một cách tự nhiên và hữu ích. Bạn có khả năng truy xuất thông tin sản phẩm từ cơ sở dữ liệu D1 và tìm kiếm nội dung tài liệu từ bộ nhớ R2. Hãy luôn trả lời bằng tiếng Việt, trừ khi được yêu cầu sử dụng ngôn ngữ khác. Giữ ngữ cảnh từ 20 tin nhắn gần nhất để cuộc trò chuyện được liền mạch.";
+const VIETNAMESE_SYSTEM_PROMPT = "Bạn là một trợ lý AI thông th���o tiếng Việt, được tích hợp vào ứng dụng Oranji. Nhiệm vụ của bạn là hỗ trợ người dùng một cách tự nhiên và hữu ích. Bạn có khả năng truy xuất thông tin sản phẩm từ cơ sở dữ liệu D1 và tìm kiếm nội dung tài liệu từ bộ nhớ R2. Hãy luôn trả lời bằng tiếng Việt, trừ khi được yêu cầu sử dụng ngôn ngữ khác. Giữ ngữ cảnh từ 20 tin nhắn gần nhất để cuộc trò chuyện được liền mạch.";
 export class ChatHandler {
   private client: OpenAI;
   private model: string;
@@ -19,7 +19,8 @@ export class ChatHandler {
     this.sessionId = sessionId;
   }
   private async saveToChatlog(messages: Message[]): Promise<void> {
-    for (const msg of messages) {
+    const validMessages = messages.filter(m => m.role === 'user' || m.role === 'assistant');
+    for (const msg of validMessages) {
       try {
         await executeTool('save_chat_message', {
           session_id: this.sessionId,
@@ -41,6 +42,7 @@ export class ChatHandler {
     content: string;
     toolCalls?: ToolCall[];
     userMessage: Message;
+    assistantMessage: Message;
   }> {
     const userMessage: Message = {
         id: crypto.randomUUID(),
@@ -59,7 +61,7 @@ export class ChatHandler {
         stream: true,
       });
       const result = await this.handleStreamResponse(stream, messages, onChunk);
-      await this.saveToChatlog([userMessage, { ...result.assistantMessage, timestamp: Date.now() }]);
+      await this.saveToChatlog([userMessage, result.assistantMessage]);
       return { ...result, userMessage };
     }
     const completion = await this.client.chat.completions.create({
@@ -69,7 +71,7 @@ export class ChatHandler {
       tool_choice: 'auto',
     });
     const result = await this.handleNonStreamResponse(completion, messages);
-    await this.saveToChatlog([userMessage, { ...result.assistantMessage, timestamp: Date.now() }]);
+    await this.saveToChatlog([userMessage, result.assistantMessage]);
     return { ...result, userMessage };
   }
   private async handleStreamResponse(
@@ -97,7 +99,7 @@ export class ChatHandler {
         }
       }
     }
-    const assistantMessage: Message = { id: crypto.randomUUID(), role: 'assistant', content: fullContent, timestamp: 0 };
+    const assistantMessage: Message = { id: crypto.randomUUID(), role: 'assistant', content: fullContent, timestamp: Date.now() };
     if (accumulatedToolCalls.length > 0) {
       const executedTools = await this.executeToolCalls(accumulatedToolCalls);
       const finalResponse = await this.generateToolResponse(conversation, accumulatedToolCalls, executedTools);
@@ -115,9 +117,9 @@ export class ChatHandler {
     const responseMessage = completion.choices[0]?.message;
     if (!responseMessage) {
       const content = 'I apologize, but I encountered an issue processing your request.';
-      return { content, assistantMessage: { id: crypto.randomUUID(), role: 'assistant', content, timestamp: 0 } };
+      return { content, assistantMessage: { id: crypto.randomUUID(), role: 'assistant', content, timestamp: Date.now() } };
     }
-    const assistantMessage: Message = { id: crypto.randomUUID(), role: 'assistant', content: responseMessage.content || '', timestamp: 0 };
+    const assistantMessage: Message = { id: crypto.randomUUID(), role: 'assistant', content: responseMessage.content || '', timestamp: Date.now() };
     if (!responseMessage.tool_calls) {
       return { content: responseMessage.content || 'I apologize, but I encountered an issue.', assistantMessage };
     }
@@ -160,9 +162,13 @@ export class ChatHandler {
     return followUpCompletion.choices[0]?.message?.content || 'Tool results processed successfully.';
   }
   private buildConversationMessages(userMessage: string, history: Message[]) {
+    const validHistory = history
+      .slice(-20)
+      .filter(m => ['user', 'assistant'].includes(m.role))
+      .map(m => ({ role: m.role as 'user' | 'assistant', content: m.content }));
     return [
       { role: 'system' as const, content: VIETNAMESE_SYSTEM_PROMPT },
-      ...history.slice(-20).map(m => ({ role: m.role, content: m.content })),
+      ...validHistory,
       { role: 'user' as const, content: userMessage }
     ];
   }

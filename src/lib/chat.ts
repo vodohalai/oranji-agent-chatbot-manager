@@ -10,12 +10,16 @@ export const MODELS = [
   { id: 'google-ai-studio/gemini-2.0-flash', name: 'Gemini 2.0 Flash' },
 ];
 export const MOCK_PRODUCTS = [
-    { id: '1', name: 'S���n phẩm Oranji', description: 'Trợ lý AI tiếng Việt thông minh', price: 500000, stock_quantity: 100, category: 'AI' },
+    { id: '1', name: 'Sản phẩm Oranji', description: 'Trợ lý AI tiếng Việt thông minh', price: 500000, stock_quantity: 100, category: 'AI' },
     { id: '2', name: 'Gói Cloudflare Worker', description: 'Triển khai ứng dụng serverless tại biên', price: 120000, stock_quantity: 1000, category: 'Infrastructure' },
-    { id: '3', name: 'Lưu trữ R2', description: 'Lưu trữ đối tượng tương thích S3 với chi phí thấp', price: 5000, stock_quantity: 0, category: 'Storage' },
+    { id: '3', name: 'L��u trữ R2', description: 'Lưu trữ đối tượng tương th��ch S3 với chi phí thấp', price: 5000, stock_quantity: 0, category: 'Storage' },
     { id: '4', name: 'Cơ sở dữ liệu D1', description: 'Cơ sở dữ liệu SQL serverless', price: 25000, stock_quantity: 0, category: 'Database' },
     { id: '5', name: 'Tư vấn triển khai AI', description: 'Dịch vụ tư vấn chuyên nghiệp cho dự án AI', price: 10000000, stock_quantity: 10, category: 'Service' },
 ];
+export const generateSessionTitle = (content?: string): string => {
+  if (!content) return `Trò chuyện lúc ${new Date().toLocaleTimeString()}`;
+  return content.trim().substring(0, 40) + (content.length > 40 ? '...' : '');
+};
 class ChatService {
   private sessionId: string;
   private baseUrl: string;
@@ -26,6 +30,9 @@ class ChatService {
   private async request<T>(url: string, options?: RequestInit): Promise<{ success: boolean; data?: T; error?: string }> {
     try {
       const response = await fetch(url, options);
+      if (response.status === 204) {
+        return { success: true };
+      }
       const data = await response.json();
       if (!response.ok) {
         return { success: false, error: data.error || `HTTP ${response.status}` };
@@ -78,6 +85,12 @@ class ChatService {
   }
   async listSessions() { return this.request<SessionInfo[]>('/api/sessions'); }
   async deleteSession(sessionId: string) { return this.request(`/api/sessions/${sessionId}`, { method: 'DELETE' }); }
+  async clearMessages(): Promise<ChatResponse> {
+    return this.request<ChatState>(`${this.baseUrl}/clear`, { method: 'POST' });
+  }
+  async clearAllSessions(): Promise<{ success: boolean }> {
+    return this.request('/api/sessions/all', { method: 'DELETE' });
+  }
   async updateModel(model: string) {
     return this.request<ChatState>(`${this.baseUrl}/model`, {
       method: 'POST',
@@ -113,5 +126,5 @@ export const formatTime = (timestamp: number): string => new Date(timestamp).toL
 export const renderToolCall = (toolCall: ToolCall): string => {
   if (!toolCall.result) return `⚠️ ${toolCall.name}: No result`;
   if (typeof toolCall.result === 'object' && toolCall.result && 'error' in toolCall.result) return `❌ ${toolCall.name}: ${(toolCall.result as ErrorResult).error}`;
-  return `🔧 ${toolCall.name}: Executed`;
+  return `��� ${toolCall.name}: Executed`;
 };
