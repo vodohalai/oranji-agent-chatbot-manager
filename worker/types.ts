@@ -29,6 +29,8 @@ export interface ChatState {
   messages: Message[];
   sessionId: string;
   model: string;
+  streamingMessage?: string;
+  isProcessing?: boolean;
 }
 export interface SessionInfo {
   id: string;

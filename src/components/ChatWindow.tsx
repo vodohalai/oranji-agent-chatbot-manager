@@ -7,10 +7,10 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { formatTime, renderToolCall } from '@/lib/chat';
-import type { ChatState } from '../../worker/types';
+import type { ChatState, ToolCall } from '../../worker/types';
 import { cn } from '@/lib/utils';
 interface ChatWindowProps {
-  chatState: ChatState;
+  chatState: Partial<ChatState>;
   input: string;
   isLoading: boolean;
   onInputChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
@@ -34,12 +34,13 @@ export function ChatWindow({
       }
     }
   }, [chatState.messages, chatState.streamingMessage]);
+  const messages = chatState.messages || [];
   return (
     <Card className="h-full w-full flex flex-col bg-card/80 backdrop-blur-sm border-border/50 shadow-2xl">
       <CardContent className="flex-1 p-0">
         <ScrollArea className="h-full" ref={scrollAreaRef}>
           <div className="p-4 sm:p-6 space-y-6">
-            {chatState.messages.length === 0 && !isLoading && (
+            {messages.length === 0 && !isLoading && (
               <div className="text-center text-muted-foreground py-8 flex flex-col items-center justify-center h-full animate-fade-in">
                 <Sparkles className="w-12 h-12 mx-auto mb-4 opacity-50" />
                 <p className="font-semibold">Bắt đầu cuộc trò chuyện</p>
@@ -51,37 +52,49 @@ export function ChatWindow({
                 </div>
               </div>
             )}
-            {chatState.messages.map((msg) => (
-              <motion.div
-                key={msg.id}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3, ease: 'easeOut' }}
-                className={cn('flex items-end gap-2', msg.role === 'user' ? 'justify-end' : 'justify-start')}
-              >
-                {msg.role === 'assistant' && <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-primary center text-primary-foreground"><Bot size={18} /></div>}
-                <div className={cn('max-w-[85%] p-3 rounded-2xl', msg.role === 'user' ? 'bg-primary text-primary-foreground rounded-br-lg' : 'bg-muted rounded-bl-lg')}>
-                  <p className="whitespace-pre-wrap text-pretty">{msg.content}</p>
-                  {msg.toolCalls && msg.toolCalls.length > 0 && (
-                    <div className="mt-2 pt-2 border-t border-current/20">
-                      <div className="flex items-center gap-1.5 mb-2 text-xs opacity-80">
-                        <Wrench size={14} />
-                        <span>Công c��� đã sử dụng:</span>
+            {messages.map((msg) => {
+              let toolCalls: ToolCall[] = [];
+              if (typeof msg.toolCalls === 'string') {
+                try {
+                  toolCalls = JSON.parse(msg.toolCalls);
+                } catch (e) {
+                  console.error("Failed to parse toolCalls", e);
+                }
+              } else if (Array.isArray(msg.toolCalls)) {
+                toolCalls = msg.toolCalls;
+              }
+              return (
+                <motion.div
+                  key={msg.id}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.3, ease: 'easeOut' }}
+                  className={cn('flex items-end gap-2', msg.role === 'user' ? 'justify-end' : 'justify-start')}
+                >
+                  {msg.role === 'assistant' && <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-primary center text-primary-foreground"><Bot size={18} /></div>}
+                  <div className={cn('max-w-[85%] p-3 rounded-2xl', msg.role === 'user' ? 'bg-primary text-primary-foreground rounded-br-lg' : 'bg-muted rounded-bl-lg')}>
+                    <p className="whitespace-pre-wrap text-pretty">{msg.content}</p>
+                    {toolCalls.length > 0 && (
+                      <div className="mt-2 pt-2 border-t border-current/20">
+                        <div className="flex items-center gap-1.5 mb-2 text-xs opacity-80">
+                          <Wrench size={14} />
+                          <span>Công cụ đã sử dụng:</span>
+                        </div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {toolCalls.map((tool, idx) => (
+                            <Badge key={idx} variant={msg.role === 'user' ? 'secondary' : 'outline'} className="text-xs font-normal">
+                              {renderToolCall(tool)}
+                            </Badge>
+                          ))}
+                        </div>
                       </div>
-                      <div className="flex flex-wrap gap-1.5">
-                        {msg.toolCalls.map((tool, idx) => (
-                          <Badge key={idx} variant={msg.role === 'user' ? 'secondary' : 'outline'} className="text-xs font-normal">
-                            {renderToolCall(tool)}
-                          </Badge>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  <div className="text-right text-xs opacity-60 mt-2">{formatTime(msg.timestamp)}</div>
-                </div>
-                {msg.role === 'user' && <div className="flex-shrink-0 w-8 h-8 rounded-full bg-secondary center text-secondary-foreground"><User size={18} /></div>}
-              </motion.div>
-            ))}
+                    )}
+                    <div className="text-right text-xs opacity-60 mt-2">{formatTime(msg.timestamp)}</div>
+                  </div>
+                  {msg.role === 'user' && <div className="flex-shrink-0 w-8 h-8 rounded-full bg-secondary center text-secondary-foreground"><User size={18} /></div>}
+                </motion.div>
+              );
+            })}
             {chatState.streamingMessage && (
               <div className="flex items-end gap-2 justify-start">
                 <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-primary center text-primary-foreground"><Bot size={18} /></div>

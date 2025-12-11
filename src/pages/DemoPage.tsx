@@ -11,7 +11,7 @@ import {Card} from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { chatService, formatTime, renderToolCall, MODELS, generateSessionTitle } from '../lib/chat';
-import type { ChatState, SessionInfo } from '../../worker/types';
+import type { ChatState, SessionInfo, ToolCall } from '../../worker/types';
 import { AppLayout } from '@/components/layout/AppLayout';
 export function DemoPage() { // Don't touch this exporting, Its a named export
   const [isDark, setIsDark] = useState(() => {
@@ -21,7 +21,6 @@ export function DemoPage() { // Don't touch this exporting, Its a named export
   const [chatState, setChatState] = useState<ChatState>({
     messages: [],
     sessionId: chatService.getSessionId(),
-    isProcessing: false,
     model: 'google-ai-studio/gemini-2.0-flash',
     streamingMessage: ''
   });
@@ -95,15 +94,13 @@ export function DemoPage() { // Don't touch this exporting, Its a named export
       await chatService.createSession(title, chatState.sessionId, message);
       await loadSessions(); // Refresh session list
     }
-    const response = await chatService.sendMessage(message, chatState.model, (chunk) => {
+    await chatService.sendMessage(message, chatState.model, (chunk) => {
       setChatState(prev => ({
         ...prev,
         streamingMessage: (prev.streamingMessage || '') + chunk
       }));
     });
-    if (response.success) {
-      await loadCurrentSession();
-    }
+    await loadCurrentSession();
     setIsLoading(false);
   };
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -112,17 +109,11 @@ export function DemoPage() { // Don't touch this exporting, Its a named export
       handleSubmit(e);
     }
   };
-  const handleClear = async () => {
-    const response = await chatService.clearMessages();
-    if (response.success && response.data) {
-      setChatState(prev => ({ ...prev, ...response.data }));
-    }
+  const handleClear = () => {
+    setChatState(prev => ({ ...prev, messages: [], streamingMessage: '' }));
   };
-  const handleModelChange = async (model: string) => {
-    const response = await chatService.updateModel(model);
-    if (response.success && response.data) {
-      setChatState(prev => ({ ...prev, ...response.data }));
-    }
+  const handleModelChange = (model: string) => {
+    setChatState(prev => ({ ...prev, model }));
   };
   // Save current session if it has unsaved messages
   const saveCurrentSessionIfNeeded = useCallback(async () => {
@@ -140,7 +131,6 @@ export function DemoPage() { // Don't touch this exporting, Its a named export
     setChatState({
       messages: [],
       sessionId: chatService.getSessionId(),
-      isProcessing: false,
       model: chatState.model,
       streamingMessage: ''
     });
@@ -156,7 +146,6 @@ export function DemoPage() { // Don't touch this exporting, Its a named export
       sessionId: sessionId,
       messages: [],
       streamingMessage: '',
-      isProcessing: false
     }));
     // Load the selected session's messages
     await loadCurrentSession();
@@ -278,46 +267,58 @@ export function DemoPage() { // Don't touch this exporting, Its a named export
               </div>
             </div>
           )}
-          {chatState.messages.map((msg) => (
-            <motion.div
-              key={msg.id}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
-            >
-              <div className={`max-w-[80%] p-3 rounded-2xl ${
-                msg.role === 'user'
-                  ? 'bg-primary text-primary-foreground'
-                  : 'bg-muted'
-              }`}>
-                <div className="flex items-center gap-2 mb-1">
-                  {msg.role === 'user' ? (
-                    <User className="w-4 h-4" />
-                  ) : (
-                    <Bot className="w-4 h-4" />
-                  )}
-                  <span className="text-xs opacity-70">
-                    <Clock className="w-3 h-3 inline mr-1" />
-                    {formatTime(msg.timestamp)}
-                  </span>
-                </div>
-                <p className="whitespace-pre-wrap mb-2">{msg.content}</p>
-                {msg.toolCalls && msg.toolCalls.length > 0 && (
-                  <div className="mt-2 pt-2 border-t border-current/20">
-                    <div className="flex items-center gap-1 mb-2 text-xs opacity-70">
-                      <Wrench className="w-3 h-3" />
-                      Tools used:
-                    </div>
-                    {msg.toolCalls.map((tool, idx) => (
-                      <Badge key={idx} variant="outline" className="mr-1 mb-1 text-xs">
-                        {renderToolCall(tool)}
-                      </Badge>
-                    ))}
+          {chatState.messages.map((msg) => {
+            let toolCalls: ToolCall[] = [];
+            if (typeof msg.toolCalls === 'string') {
+              try {
+                toolCalls = JSON.parse(msg.toolCalls);
+              } catch (e) {
+                console.error("Failed to parse toolCalls", e);
+              }
+            } else if (Array.isArray(msg.toolCalls)) {
+              toolCalls = msg.toolCalls;
+            }
+            return (
+              <motion.div
+                key={msg.id}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+              >
+                <div className={`max-w-[80%] p-3 rounded-2xl ${
+                  msg.role === 'user'
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-muted'
+                }`}>
+                  <div className="flex items-center gap-2 mb-1">
+                    {msg.role === 'user' ? (
+                      <User className="w-4 h-4" />
+                    ) : (
+                      <Bot className="w-4 h-4" />
+                    )}
+                    <span className="text-xs opacity-70">
+                      <Clock className="w-3 h-3 inline mr-1" />
+                      {formatTime(msg.timestamp)}
+                    </span>
                   </div>
-                )}
-              </div>
-            </motion.div>
-          ))}
+                  <p className="whitespace-pre-wrap mb-2">{msg.content}</p>
+                  {toolCalls.length > 0 && (
+                    <div className="mt-2 pt-2 border-t border-current/20">
+                      <div className="flex items-center gap-1 mb-2 text-xs opacity-70">
+                        <Wrench className="w-3 h-3" />
+                        Tools used:
+                      </div>
+                      {toolCalls.map((tool, idx) => (
+                        <Badge key={idx} variant="outline" className="mr-1 mb-1 text-xs">
+                          {renderToolCall(tool)}
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </motion.div>
+            );
+          })}
           {chatState.streamingMessage && (
             <div className="flex justify-start">
               <div className="bg-muted p-3 rounded-2xl max-w-[80%]">
@@ -332,7 +333,7 @@ export function DemoPage() { // Don't touch this exporting, Its a named export
               </div>
             </div>
           )}
-          {(isLoading || chatState.isProcessing) && !chatState.streamingMessage && (
+          {isLoading && !chatState.streamingMessage && (
             <div className="flex justify-start">
               <div className="bg-muted p-3 rounded-2xl">
                 <div className="flex items-center gap-2 mb-1">
@@ -362,11 +363,11 @@ export function DemoPage() { // Don't touch this exporting, Its a named export
               placeholder="Chat with me"
               className="flex-1 min-h-[42px] max-h-32 resize-none leading-tight py-3"
               rows={1}
-              disabled={isLoading || chatState.isProcessing}
+              disabled={isLoading}
             />
             <Button
               type="submit"
-              disabled={!input.trim() || isLoading || chatState.isProcessing}
+              disabled={!input.trim() || isLoading}
             >
               <Send className="w-4 h-4" />
             </Button>

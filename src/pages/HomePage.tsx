@@ -50,7 +50,7 @@ export function HomePage() {
     if (response.success && response.data) {
       setChatState(response.data);
     } else {
-      toast.error("Không thể tải phiên. Bắt đầu phiên mới.");
+      toast.error("Không thể tải phi��n. Bắt đầu phiên mới.");
       handleNewSession();
     }
     setStreamingMessage('');
@@ -147,7 +147,7 @@ export function HomePage() {
         </Button>
       </div>
       <Button onClick={handleNewSession} className="w-full mb-4">
-        <Plus className="mr-2 h-4 w-4" /> Cuộc trò chuyện mới
+        <Plus className="mr-2 h-4 w-4" /> Cuộc trò chuy���n mới
       </Button>
       <div className="flex-1 overflow-y-auto -mr-2 pr-2 space-y-2">
         {sessions.map(session => (

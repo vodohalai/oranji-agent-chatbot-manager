@@ -100,7 +100,7 @@ export class ChatHandler {
       const assistantMessage: Message = { id: crypto.randomUUID(), role: 'assistant', content, timestamp: Date.now() };
       return { content, assistantMessage };
     }
-    const assistantMessage: Message = { id: crypto.randomUUID(), role: 'assistant', content: responseMessage.content || '', timestamp: Date.now() };
+    const assistantMessage: Message = { id: crypto.randomUUID(), role: 'assistant' as const, content: responseMessage.content || '', timestamp: Date.now() };
     if (!responseMessage.tool_calls) {
       return { content: responseMessage.content || 'I apologize, but I encountered an issue.', assistantMessage };
     }
@@ -146,12 +146,12 @@ export class ChatHandler {
     const systemPrompt = await getSystemPrompt(this.env);
     const validHistory = history
       .slice(-20)
-      .filter(m => (m.role === 'user' || m.role === 'assistant'))
-      .map(m => ({ role: m.role as 'user' | 'assistant', content: m.content }));
+      .filter(m => (m.role === 'user' || m.role === 'assistant') && m.content !== null)
+      .map(m => ({ role: m.role as 'user' | 'assistant', content: m.content! }));
     return [
       { role: 'system', content: systemPrompt },
       ...validHistory,
-      { role: 'user', content: userMessage.content }
+      { role: 'user', content: userMessage.content! }
     ];
   }
   updateModel(newModel: string): void {

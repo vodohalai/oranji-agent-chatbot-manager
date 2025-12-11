@@ -33,6 +33,7 @@ export function ChatEmbed(): JSX.Element {
     const message = input.trim();
     setInput('');
     setIsLoading(true);
+    setChatState(prev => ({ ...prev, isProcessing: true }));
     const userMessage = {
       id: crypto.randomUUID(),
       role: 'user' as const,
@@ -56,6 +57,7 @@ export function ChatEmbed(): JSX.Element {
     });
     await loadCurrentSession();
     setIsLoading(false);
+    setChatState(prev => ({ ...prev, isProcessing: false, streamingMessage: '' }));
   };
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
