@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { motion } from 'framer-motion';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { MessageSquare } from 'lucide-react';
@@ -34,7 +33,6 @@ export function ChatEmbed(): JSX.Element {
     const message = input.trim();
     setInput('');
     setIsLoading(true);
-    setChatState(prev => ({ ...prev, isProcessing: true }));
     const userMessage = {
       id: crypto.randomUUID(),
       role: 'user' as const,
@@ -58,7 +56,6 @@ export function ChatEmbed(): JSX.Element {
     });
     await loadCurrentSession();
     setIsLoading(false);
-    setChatState(prev => ({ ...prev, isProcessing: false, streamingMessage: '' }));
   };
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -70,11 +67,9 @@ export function ChatEmbed(): JSX.Element {
     <div className="fixed bottom-5 right-5 z-50">
       <Sheet open={isOpen} onOpenChange={setIsOpen}>
         <SheetTrigger asChild>
-          <motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}>
-            <Button size="lg" className="rounded-full w-16 h-16 shadow-lg btn-gradient" aria-label="Open chat widget">
-              <MessageSquare className="w-8 h-8" />
-            </Button>
-          </motion.div>
+          <Button size="lg" className="rounded-full w-16 h-16 shadow-lg btn-gradient">
+            <MessageSquare className="w-8 h-8" />
+          </Button>
         </SheetTrigger>
         <SheetContent className="w-full sm:max-w-md p-0 flex flex-col">
           <SheetHeader className="p-4 border-b">

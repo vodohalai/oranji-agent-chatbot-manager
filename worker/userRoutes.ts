@@ -3,7 +3,6 @@ import { getAgentByName } from 'agents';
 import { ChatAgent } from './agent';
 import { API_RESPONSES } from './config';
 import { Env, getAppController, registerSession, unregisterSession } from "./core-utils";
-
 /**
  * DO NOT MODIFY THIS FUNCTION. Only for your reference.
  */
@@ -20,17 +19,15 @@ export function coreRoutes(app: Hono<{ Bindings: Env }>) {
             headers: c.req.header(),
             body: c.req.method === 'GET' || c.req.method === 'DELETE' ? undefined : c.req.raw.body
         }));
-    
         } catch (error) {
         console.error('Agent routing error:', error);
-        return c.json({ 
-            success: false, 
-            error: API_RESPONSES.AGENT_ROUTING_FAILED 
+        return c.json({
+            success: false,
+            error: API_RESPONSES.AGENT_ROUTING_FAILED
         }, { status: 500 });
         }
     });
 }
-
 export function userRoutes(app: Hono<{ Bindings: Env }>) {
     // Add your routes here
     /**
@@ -44,13 +41,12 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
             return c.json({ success: true, data: sessions });
         } catch (error) {
             console.error('Failed to list sessions:', error);
-            return c.json({ 
-                success: false, 
-                error: 'Failed to retrieve sessions' 
+            return c.json({
+                success: false,
+                error: 'Failed to retrieve sessions'
             }, { status: 500 });
         }
     });
-
     /**
      * Create a new chat session
      * POST /api/sessions
@@ -60,9 +56,7 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
         try {
             const body = await c.req.json().catch(() => ({}));
             const { title, sessionId: providedSessionId, firstMessage } = body;
-            
             const sessionId = providedSessionId || crypto.randomUUID();
-            
             // Generate better session titles
             let sessionTitle = title;
             if (!sessionTitle) {
@@ -73,33 +67,29 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
                     hour: '2-digit',
                     minute: '2-digit'
                 });
-
                 if (firstMessage && firstMessage.trim()) {
                     const cleanMessage = firstMessage.trim().replace(/\s+/g, ' ');
-                    const truncated = cleanMessage.length > 40 
-                        ? cleanMessage.slice(0, 37) + '...' 
+                    const truncated = cleanMessage.length > 40
+                        ? cleanMessage.slice(0, 37) + '...'
                         : cleanMessage;
-                    sessionTitle = `${truncated} • ${dateTime}`;
+                    sessionTitle = `${truncated}`;
                 } else {
-                    sessionTitle = `Chat ${dateTime}`;
+                    sessionTitle = `Trò chuyện ${dateTime}`;
                 }
             }
-            
             await registerSession(c.env, sessionId, sessionTitle);
-            
-            return c.json({ 
-                success: true, 
+            return c.json({
+                success: true,
                 data: { sessionId, title: sessionTitle }
             });
         } catch (error) {
             console.error('Failed to create session:', error);
-            return c.json({ 
-                success: false, 
-                error: 'Failed to create session' 
+            return c.json({
+                success: false,
+                error: 'Failed to create session'
             }, { status: 500 });
         }
     });
-
     /**
      * Delete a chat session
      * DELETE /api/sessions/:sessionId
@@ -108,24 +98,21 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
         try {
             const sessionId = c.req.param('sessionId');
             const deleted = await unregisterSession(c.env, sessionId);
-            
             if (!deleted) {
-                return c.json({ 
-                    success: false, 
-                    error: 'Session not found' 
+                return c.json({
+                    success: false,
+                    error: 'Session not found'
                 }, { status: 404 });
             }
-            
             return c.json({ success: true, data: { deleted: true } });
         } catch (error) {
             console.error('Failed to delete session:', error);
-            return c.json({ 
-                success: false, 
-                error: 'Failed to delete session' 
+            return c.json({
+                success: false,
+                error: 'Failed to delete session'
             }, { status: 500 });
         }
     });
-
     /**
      * Update session title
      * PUT /api/sessions/:sessionId/title
@@ -135,34 +122,29 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
         try {
             const sessionId = c.req.param('sessionId');
             const { title } = await c.req.json();
-            
             if (!title || typeof title !== 'string') {
-                return c.json({ 
-                    success: false, 
-                    error: 'Title is required' 
+                return c.json({
+                    success: false,
+                    error: 'Title is required'
                 }, { status: 400 });
             }
-            
             const controller = getAppController(c.env);
             const updated = await controller.updateSessionTitle(sessionId, title);
-            
             if (!updated) {
-                return c.json({ 
-                    success: false, 
-                    error: 'Session not found' 
+                return c.json({
+                    success: false,
+                    error: 'Session not found'
                 }, { status: 404 });
             }
-            
             return c.json({ success: true, data: { title } });
         } catch (error) {
             console.error('Failed to update session title:', error);
-            return c.json({ 
-                success: false, 
-                error: 'Failed to update session title' 
+            return c.json({
+                success: false,
+                error: 'Failed to update session title'
             }, { status: 500 });
         }
     });
-
     /**
      * Get session count and stats
      * GET /api/sessions/stats
@@ -171,19 +153,18 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
         try {
             const controller = getAppController(c.env);
             const count = await controller.getSessionCount();
-            return c.json({ 
-                success: true, 
-                data: { totalSessions: count } 
+            return c.json({
+                success: true,
+                data: { totalSessions: count }
             });
         } catch (error) {
             console.error('Failed to get session stats:', error);
-            return c.json({ 
-                success: false, 
-                error: 'Failed to retrieve session stats' 
+            return c.json({
+                success: false,
+                error: 'Failed to retrieve session stats'
             }, { status: 500 });
         }
     });
-
     /**
      * Clear all chat sessions
      * DELETE /api/sessions
@@ -192,21 +173,40 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
         try {
             const controller = getAppController(c.env);
             const deletedCount = await controller.clearAllSessions();
-            return c.json({ 
-                success: true, 
-                data: { deletedCount } 
+            return c.json({
+                success: true,
+                data: { deletedCount }
             });
         } catch (error) {
             console.error('Failed to clear all sessions:', error);
-            return c.json({ 
-                success: false, 
-                error: 'Failed to clear all sessions' 
+            return c.json({
+                success: false,
+                error: 'Failed to clear all sessions'
             }, { status: 500 });
         }
     });
-
-    // Example route - you can remove this
-    app.get('/api/test', (c) => c.json({ success: true, data: { name: 'this works' }}));
-    
-    // 🤖 AI Extension Point: Add more custom routes here
+    // --- Messenger Webhook Mock Routes (Phase 1) ---
+    /**
+     * Mock route to test webhook connectivity from admin UI.
+     * In Phase 3, this will be part of the actual webhook verification.
+     * GET /api/messenger/test
+     */
+    app.get('/api/messenger/test', (c) => {
+        // In a real scenario, you'd check for FB_VERIFY_TOKEN.
+        // For Phase 1, we always return success.
+        console.log('Messenger webhook test endpoint hit.');
+        return c.json({ success: true, message: 'Mock webhook connection successful!' });
+    });
+    /**
+     * Mock route to send a test message from admin UI.
+     * In Phase 3, this will use the FB_PAGE_TOKEN to send a real message.
+     * POST /api/messenger/send
+     */
+    app.post('/api/messenger/send', async (c) => {
+        const body = await c.req.json().catch(() => ({}));
+        console.log('Mock sending message:', body);
+        // In a real scenario, you'd use fetch with FB_PAGE_TOKEN to call the Messenger API.
+        // For Phase 1, we just log and return success.
+        return c.json({ success: true, message: 'Mock test message sent successfully!' });
+    });
 }

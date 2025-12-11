@@ -1,47 +1,41 @@
 // Client-side helpers for Messenger integration (Admin UI)
 /**
- * Tests the webhook connection by simulating Facebook's verification request.
+ * Tests the webhook connection.
+ * In Phase 1, this will hit a mock endpoint that always returns success.
  */
-export async function testWebhookConnection(verifyToken: string): Promise<{ success: boolean; message: string }> {
+export async function testWebhookConnection(): Promise<{ success: boolean; message: string }> {
   try {
-    const response = await fetch(`/api/messenger/webhook?hub.mode=subscribe&hub.verify_token=${verifyToken}&hub.challenge=challenge-accepted`);
-    if (response.ok) {
-      const text = await response.text();
-      if (text === 'challenge-accepted') {
-        return { success: true, message: 'Webhook verified successfully!' };
-      }
+    // This endpoint will be implemented in the worker in a later phase
+    const response = await fetch('/api/messenger/test');
+    if (!response.ok) {
+      throw new Error('Network response was not ok');
     }
-    return { success: false, message: `Verification failed. Status: ${response.status}` };
+    const data = await response.json();
+    return { success: data.success, message: data.message || 'Test successful!' };
   } catch (error) {
     console.error('Webhook test failed:', error);
-    return { success: false, message: 'Failed to connect to the webhook endpoint.' };
+    return { success: false, message: 'Failed to connect to the test endpoint.' };
   }
 }
 /**
- * Sends a test message by simulating an incoming message from Facebook.
- * @param recipientId - A mock sender ID to use for the test.
- * @param message - The message text to send.
+ * Sends a test message via the webhook.
+ * In Phase 1, this is a mock.
+ * @param recipientId - The recipient's ID (e.g., PSID for Facebook)
+ * @param message - The message text to send
  */
 export async function sendTestMessage(recipientId: string, message: string): Promise<{ success: boolean; message: string }> {
   try {
-    const payload = {
-      object: 'page',
-      entry: [{
-        messaging: [{
-          sender: { id: recipientId },
-          message: { text: message }
-        }]
-      }]
-    };
-    const response = await fetch('/api/messenger/webhook', {
+    // This endpoint will be implemented in the worker in a later phase
+    const response = await fetch('/api/messenger/send', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
+      body: JSON.stringify({ recipientId, message }),
     });
-    if (response.ok) {
-      return { success: true, message: 'Test message sent successfully!' };
+    if (!response.ok) {
+      throw new Error('Network response was not ok');
     }
-    return { success: false, message: `Failed to send test message. Status: ${response.status}` };
+    const data = await response.json();
+    return { success: data.success, message: data.message || 'Test message sent!' };
   } catch (error) {
     console.error('Sending test message failed:', error);
     return { success: false, message: 'Failed to send the test message.' };
