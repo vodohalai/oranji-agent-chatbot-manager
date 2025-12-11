@@ -2,7 +2,7 @@
 
 Oranji is a sophisticated AI agent chatbot application built on Cloudflare Workers and Durable Objects, optimized for Vietnamese language support. It enables seamless chat interactions via a modern web interface or Facebook Page Messenger integration. The system maintains conversation history (up to the 20 most recent messages per user in D1's 'chatlog' table for efficiency), retrieves documents from R2 buckets, and queries product information from D1's 'products_info' table. Admins can manage the chatbot, sessions, documents, and products through an intuitive admin dashboard. The frontend features a stunning, responsive design using shadcn/ui and Tailwind CSS, with smooth micro-interactions and mobile-first responsiveness.
 
-[cloudflarebutton]
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/vodohalai/oranji-agent-chatbot-manager)
 
 ## Features
 
@@ -155,7 +155,7 @@ Deploy to Cloudflare Workers for global edge execution with Durable Objects for 
    - Test D1/R2 access; fallbacks use mock data if bindings are missing.
    - Monitor observability in the dashboard (enabled by default).
 
-[cloudflarebutton]
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/vodohalai/oranji-agent-chatbot-manager)
 
 ## Contributing
 
